@@ -1,6 +1,5 @@
 /* agentic-copilot.js — sidebar IDE bên phải, 1 file duy nhất.
-   Nhúng: <script src="http://127.0.0.1:8001/widget/agentic-copilot.js"
-                   data-gateway="http://127.0.0.1:8001" data-role="student"></script>
+   Nhúng bởi reverse proxy: <script src="/ai/widget.js" defer></script>
    Dock phải kiểu IDE: mở là đẩy nội dung trang sang trái, kéo mép để đổi rộng.
    Phím: Alt+C đóng/mở, Enter gửi, Shift+Enter xuống dòng, Alt+M rộng/hẹp.
 */
@@ -13,8 +12,17 @@
       me = document.querySelector('script[src*="agentic-copilot.js"]');
     } catch (e) { me = null; }
   }
-  var GATEWAY = (me && me.dataset.gateway) || "http://127.0.0.1:8001";
-  var ROLE0 = (me && me.dataset.role) || "student";
+  var scriptUrl = null;
+  try { scriptUrl = me && me.src ? new URL(me.src, location.href) : null; } catch (e) { /* ignore */ }
+  var GATEWAY = (me && me.dataset.gateway) ||
+    (scriptUrl && scriptUrl.pathname.indexOf("/ai/") === 0 ? "/ai" : (scriptUrl && scriptUrl.origin)) || "/ai";
+  var CURRENT_MODE = "chat";
+  var CURRENT_CONCEPT = "";
+  var routeScript = document.createElement("script");
+  routeScript.src = GATEWAY + "/widget/route-adapter.js";
+  routeScript.defer = true;
+  document.head.appendChild(routeScript);
+  var CURRENT_IDENTITY = { user: "Guest", role: "student", roles: [] };
   function newConversationId() {
     return "acp-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
   }
@@ -23,10 +31,10 @@
     CONVERSATION_ID = sessionStorage.getItem("acp-conversation-id") || CONVERSATION_ID;
     sessionStorage.setItem("acp-conversation-id", CONVERSATION_ID);
   } catch (e) { /* sessionStorage có thể bị chặn trong iframe/private mode */ }
-  if (window.__acp_mounted && document.querySelector("#acp-side") && document.querySelector("#acp-fab")) return;
+  if (window.__acp_mounted && document.querySelector("#acp-host")) return;
   window.__acp_mounted = true;
   try {
-    document.querySelectorAll("#acp-side,#acp-fab").forEach(function (n) { n.remove(); });
+    document.querySelectorAll("#acp-host,#acp-side,#acp-fab").forEach(function (n) { n.remove(); });
     document.querySelectorAll("style[data-acp]").forEach(function (n) { n.remove(); });
   } catch (e) { /* DOM chưa sẵn sàng */ }
   var css = [
@@ -86,6 +94,8 @@
     ".acp-src{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.acp-src span{font-size:11px;color:#8a8a8a;",
     "border:1px solid #2b2b2b;background:#181818;border-radius:6px;padding:3px 8px}",
     ".acp-tools,.acp-time,.acp-mtool,.acp-think{display:none!important}",
+    "#acp-insight{margin:10px 14px 0;padding:11px 12px;border:1px solid #285247;background:#142720;border-radius:9px;color:#d9eee7;font-size:12px;line-height:1.45}",
+    "#acp-insight[hidden]{display:none}#acp-insight b{color:#fff}#acp-insight button{margin:8px 6px 0 0;border:1px solid #3c665b;background:transparent;color:#bfe2d6;border-radius:7px;padding:5px 8px;cursor:pointer}",
     ".acp-ap{margin-top:10px;border:1px solid #554507;background:#221d0c;border-radius:8px;padding:10px;color:#e7c96f;font-size:12.5px}",
     ".acp-ap button{margin-top:8px;background:#2f81f7;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600}",
     "#acp-type{display:none;padding:0 20px 8px;background:#111;color:#777;font-size:12px}",
@@ -122,10 +132,19 @@
     "body.acp-shell-open #app > .w-screen{width:100vw!important}#acp-fab{right:16px;bottom:16px}}",
     ".acp-cursor{display:inline-block;width:7px;height:15px;background:#2f81f7;vertical-align:-2px;margin-left:2px;animation:acpb .8s infinite}",
   ].join("\n");
+  var host = document.createElement("div");
+  host.id = "acp-host";
+  var root = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
   var st = document.createElement("style");
   st.setAttribute("data-acp", "1");
   st.textContent = css;
-  document.head.appendChild(st);
+  root.appendChild(st);
+  var pushStyle = document.createElement("style");
+  pushStyle.setAttribute("data-acp", "1");
+  pushStyle.textContent = "body.acp-shell-open{padding-right:var(--acp-shell-w,560px)!important;transition:padding-right .2s ease}" +
+    "body.acp-shell-open #app>.w-screen{width:calc(100vw - var(--acp-shell-w,560px))!important;transition:width .2s ease}" +
+    "@media(max-width:560px){body.acp-shell-open{padding-right:0!important}body.acp-shell-open #app>.w-screen{width:100vw!important}}";
+  document.head.appendChild(pushStyle);
   var fab = document.createElement("button");
   fab.id = "acp-fab"; fab.textContent = "✦"; fab.title = "Trợ lý LMS (Alt+C)";
   var side = document.createElement("div");
@@ -134,16 +153,13 @@
     '<div id="acp-grip" title="kéo để đổi rộng"></div>' +
     '<div id="acp-head"><div id="acp-avatar">✦</div>' +
     '<div id="acp-head-main"><div id="acp-title">New AI chat</div><span class="acp-chevron">⌄</span></div>' +
-    '<select id="acp-role" hidden title="vai trò" aria-hidden="true" tabindex="-1">' +
-    '<option value="student">student</option><option value="teacher">teacher</option>' +
-    '<option value="evaluator">evaluator</option><option value="admin">admin</option></select>' +
     '<button id="acp-new" class="acp-hbtn" title="Đoạn chat mới" aria-label="Đoạn chat mới">✚</button>' +
     '<button id="acp-share" class="acp-hbtn" title="Chia sẻ" aria-label="Chia sẻ">⤴</button>' +
     '<button id="acp-wide" class="acp-hbtn" title="rộng/hẹp (Alt+M)" aria-label="Rộng hoặc hẹp">▭</button>' +
     '<button id="acp-pin" class="acp-hbtn" title="Ghim" aria-label="Ghim">⌖</button>' +
     '<button id="acp-more" class="acp-hbtn" title="Tùy chọn" aria-label="Tùy chọn">⋯</button>' +
     '<button id="acp-x" class="acp-hbtn" title="đóng" aria-label="Đóng">»</button></div>' +
-    '<div id="acp-ctx"><span id="acp-dot"></span><span id="acp-ctx-t">…</span></div>' +
+    '<div id="acp-ctx"><span id="acp-dot"></span><span id="acp-ctx-t">…</span></div><div id="acp-insight" hidden></div>' +
     '<div id="acp-msgs"></div><div id="acp-type"><i></i><i></i><i></i> AI đang soạn…</div>' +
     '<div id="acp-inbar"><div id="acp-pop"></div><div class="acp-composer">' +
     '<div class="acp-chiprow"><button id="acp-chip" title="Ngữ cảnh LMS đang dùng" type="button">◎ <span id="acp-chip-t">LMS</span></button></div>' +
@@ -152,13 +168,13 @@
     '<button id="acp-mode" class="acp-toolbtn" title="Chế độ" type="button">⚙</button></div>' +
     '<div class="acp-fright"><button id="acp-auto" title="Chế độ tự động" type="button">Auto</button>' +
     '<button id="acp-send" title="Gửi" aria-label="Gửi" type="button">↑</button></div></div></div></div>';
-  document.body.appendChild(fab);
-  document.body.appendChild(side);
+  document.body.appendChild(host);
+  root.appendChild(fab);
+  root.appendChild(side);
   var msgs = side.querySelector("#acp-msgs");
   var input = side.querySelector("#acp-in");
   var sendBtn = side.querySelector("#acp-send");
   var typing = side.querySelector("#acp-type");
-  var roleSel = side.querySelector("#acp-role");
   var ctxT = side.querySelector("#acp-ctx-t");
   var titleEl = side.querySelector("#acp-title");
   var chip = side.querySelector("#acp-chip");
@@ -167,9 +183,9 @@
   var addBtn = side.querySelector("#acp-add");
   var modeBtn = side.querySelector("#acp-mode");
   var autoBtn = side.querySelector("#acp-auto");
+  var insight = side.querySelector("#acp-insight");
   sendBtn.textContent = "↑";
   sendBtn.title = "Gửi câu hỏi";
-  roleSel.value = ROLE0;
   function shortCtx() {
     var p = location.pathname + location.search;
     var m = p.match(/courses\/([^\/?]+)/);
@@ -179,19 +195,40 @@
     var seg = (p.split("/").filter(Boolean).pop() || "LMS").replace(/-/g, " ");
     return decodeURIComponent(seg).slice(0, 28);
   }
-  function user() {
-    try {
-      return (window.frappe && window.frappe.session && window.frappe.session.user) || "Guest";
-    } catch (e) { return "Guest"; }
-  }
+  function user() { return CURRENT_IDENTITY.user || "Guest"; }
   function pageCtx() {
     var p = location.pathname + location.search;
+    var route = window.LMSAgentRoute && window.LMSAgentRoute.parse(p);
+    if (route && route.course) return "course=" + route.course + " · " + p.slice(0, 80);
     var m = p.match(/courses\/([^\/?]+)/);
     return (m ? "course=" + decodeURIComponent(m[1]) + " · " : "") + p.slice(0, 80);
   }
   function syncUiChrome() {
-    ctxT.textContent = user() + " · " + pageCtx();
+    ctxT.textContent = user() + " · " + CURRENT_IDENTITY.role + " · " + pageCtx();
     chipT.textContent = shortCtx() || "LMS";
+  }
+  function refreshInsight() {
+    fetch(GATEWAY + "/me/mastery?page=" + encodeURIComponent(location.pathname + location.search), { credentials: "same-origin" })
+      .then(function (r) { if (!r.ok) throw new Error("unavailable"); return r.json(); })
+      .then(function (data) {
+        var weak = (data.concepts || [])[0], gate = data.soft_gate;
+        CURRENT_CONCEPT = weak ? weak.concept_id : "";
+        if (!weak && !gate) { insight.hidden = true; insight.innerHTML = ""; return; }
+        var html = gate ? "<b>Ôn nhanh 3 phút?</b> Bài này có kiến thức nền chưa vững." :
+          "<b>AI nghĩ bạn nên ôn:</b> " + esc(weak.label) + " (khoảng " + Math.round(100 * (weak.p_display || weak.p || 0)) + "%).";
+        if (weak && weak.why && weak.why.length) html += "<div>Vì evidence gần nhất: " + esc(weak.why[0].kind) + ".</div>";
+        insight.innerHTML = html;
+        if (weak) {
+          var no = document.createElement("button"); no.textContent = "Không đúng";
+          no.onclick = function () {
+            fetch(GATEWAY + "/me/feedback", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ concept_id: weak.concept_id, note: "widget-not-accurate" }) });
+            insight.hidden = true;
+          };
+          insight.appendChild(no);
+        }
+        if (gate) { var review = document.createElement("button"); review.textContent = "Ôn với AI"; review.onclick = function () { setOpen(true); send("Cho tôi ôn nhanh 3 phút kiến thức nền của bài này."); }; insight.appendChild(review); }
+        insight.hidden = false;
+      }).catch(function () { insight.hidden = true; });
   }
   function syncSend() { sendBtn.classList.toggle("ready", input.value.trim().length > 0); }
   function esc(s) {
@@ -307,7 +344,7 @@
   }
   function approve(id, btn) {
     btn.disabled = true; btn.textContent = "…";
-    fetch(GATEWAY + "/approve/" + encodeURIComponent(id), { method: "POST" })
+    fetch(GATEWAY + "/approve/" + encodeURIComponent(id), { method: "POST", credentials: "same-origin" })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         btn.textContent = "Đã duyệt ✓";
@@ -326,8 +363,8 @@
     typing.style.display = "block"; sendBtn.disabled = true;
     var t0 = Date.now();
     fetch(GATEWAY + "/chat/stream", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: roleSel.value, message: text + "\n[ngữ cảnh trang: " + pageCtx() + "]", user: user(), conversation_id: CONVERSATION_ID })
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, conversation_id: CONVERSATION_ID, page: location.pathname + location.search, mode: CURRENT_MODE })
     }).then(function (r) {
       if (!r.ok || !r.body || !r.body.getReader) return r.json().then(function (j) { addAssistant(j.answer, j.tool_calls, j.approvals, j.timings); });
       return streamSSE(r.body.getReader(), t0);
@@ -390,6 +427,7 @@
   function syncShellBody() {
     var shellOpen = side.classList.contains("open") && side.classList.contains("shell");
     document.body.classList.toggle("acp-shell-open", shellOpen);
+    fab.style.display = shellOpen ? "none" : "";
     if (shellOpen) document.documentElement.style.setProperty("--acp-shell-w", side.getBoundingClientRect().width + "px");
     else document.documentElement.style.removeProperty("--acp-shell-w");
   }
@@ -458,9 +496,16 @@
     e.stopPropagation();
     if (pop.classList.contains("show")) { closePop(); return; }
     openPop([
-      ["⚙", "Auto: trả lời toàn diện", function () { autoBtn.textContent = "Auto"; }],
-      ["✦", "Tóm tắt ngắn gọn", function () { autoBtn.textContent = "Summary"; send("Tóm tắt ngắn gọn bài học này"); }],
-      ["⌕", "Giải thích chi tiết", function () { autoBtn.textContent = "Explain"; send("Giải thích chi tiết nội dung bài học này"); }]
+      ["⚙", "Auto: trả lời toàn diện", function () { CURRENT_MODE = "chat"; autoBtn.textContent = "Auto"; }],
+      ["F", "Feynman: tôi giảng lại", function () { CURRENT_MODE = "feynman"; autoBtn.textContent = "Feynman"; send("Hãy bắt đầu phiên Feynman cho bài này."); }],
+      ["?", "Kiểm tra hội thoại", function () { CURRENT_MODE = "check"; autoBtn.textContent = "Kiểm tra"; send("Hãy bắt đầu kiểm tra hội thoại cho bài này."); }],
+      ["✓", "Chấm phiên học hiện tại", function () {
+        if (!CURRENT_CONCEPT || CURRENT_MODE === "chat") { addAssistant("Hãy mở bài có concept đã duyệt và chọn Feynman hoặc Kiểm tra trước.", [], []); return; }
+        fetch(GATEWAY + "/learning/session", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: CURRENT_MODE, concept_id: CURRENT_CONCEPT, transcript: msgs.innerText.slice(0, 12000) }) })
+          .then(function (r) { return r.json(); }).then(function (d) { addAssistant("Điểm phiên: " + Math.round(100 * d.score) + "%\n" + ((d.rubric || {}).feedback || "Đã lưu evidence ngoài LMS."), [], []); });
+      }],
+      ["✦", "Tóm tắt ngắn gọn", function () { CURRENT_MODE = "chat"; autoBtn.textContent = "Summary"; send("Tóm tắt ngắn gọn bài học này"); }],
+      ["⌕", "Giải thích chi tiết", function () { CURRENT_MODE = "chat"; autoBtn.textContent = "Explain"; send("Giải thích chi tiết nội dung bài học này"); }]
     ]);
   };
   autoBtn.onclick = function () { autoBtn.textContent = autoBtn.textContent === "Auto" ? "Auto ✓" : "Auto"; };
@@ -484,7 +529,19 @@
     if (e.altKey && (e.key === "c" || e.key === "C")) { e.preventDefault(); fab.onclick(); }
     if (e.altKey && (e.key === "m" || e.key === "M")) { e.preventDefault(); if (!side.classList.contains("open")) setOpen(true); toggleShell(); }
   });
+  fetch(GATEWAY + "/identity", { credentials: "same-origin" })
+    .then(function (response) {
+      if (!response.ok) throw new Error("unauthorized");
+      return response.json();
+    })
+    .then(function (identity) { CURRENT_IDENTITY = identity; syncUiChrome(); refreshInsight(); })
+    .catch(function () { CURRENT_IDENTITY = { user: "Guest", role: "student", roles: [] }; syncUiChrome(); });
   syncUiChrome();
   syncSend();
   if (!msgs.children.length) addWelcome();
+  var lastRoute = location.pathname + location.search;
+  setInterval(function () {
+    var nextRoute = location.pathname + location.search;
+    if (nextRoute !== lastRoute) { lastRoute = nextRoute; syncUiChrome(); refreshInsight(); }
+  }, 1000);
 })();

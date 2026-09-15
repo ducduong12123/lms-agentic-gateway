@@ -1,0 +1,44 @@
+- generic [active] [ref=f11e1]:
+  - generic [ref=f11e2]:
+    - generic [ref=f11e3]:
+      - link "Skip to main content" [ref=f11e4] [cursor=pointer]:
+        - /url: "#main-content"
+      - generic [ref=f11e6]:
+        - generic [ref=f11e7]:
+          - button "Learning Administrator" [ref=f11e9] [cursor=pointer]:
+            - generic [ref=f11e13]:
+              - generic [ref=f11e14]: Learning
+              - generic [ref=f11e15]: Administrator
+          - generic [ref=f11e18]:
+            - navigation [ref=f11e20]:
+              - button "Trang chủ" [ref=f11e22] [cursor=pointer]
+              - button "Tìm kiếm Shortcut Control + K" [ref=f11e30] [cursor=pointer]:
+                - generic [ref=f11e31]:
+                  - generic [ref=f11e36]: Tìm kiếm
+                  - note "Shortcut Control + K" [ref=f11e37]:
+                    - generic [ref=f11e38]: Ctrl
+                    - generic [ref=f11e39]: K
+              - button "Thông báo" [ref=f11e41] [cursor=pointer]
+            - navigation [ref=f11e49]:
+              - button "Các khóa học" [ref=f11e51] [cursor=pointer]
+              - button "Chương trình" [ref=f11e59] [cursor=pointer]
+              - button "Lớp học" [ref=f11e68] [cursor=pointer]
+              - button "Chứng chỉ" [ref=f11e78] [cursor=pointer]
+              - button "Công việc" [ref=f11e86] [cursor=pointer]
+              - button "Thống kê" [ref=f11e94] [cursor=pointer]
+            - navigation [ref=f11e102]:
+              - button "Các bài kiểm tra" [ref=f11e104] [cursor=pointer]
+              - button "Bài tập" [ref=f11e112] [cursor=pointer]
+              - button "Bài tập lập trình" [ref=f11e120] [cursor=pointer]
+          - generic [ref=f11e128] [cursor=pointer]:
+            - generic [ref=f11e129]: Thêm
+            - button [ref=f11e133]
+        - generic [ref=f11e136]:
+          - generic [ref=f11e137]:
+            - generic [ref=f11e138] [cursor=pointer]
+            - generic [ref=f11e139] [cursor=pointer]
+          - img [ref=f11e140] [cursor=pointer]
+      - main [ref=f11e143]
+    - region "Notifications alt+T":
+      - list
+  - button "✦" [ref=f11e144] [cursor=pointer]

@@ -5,12 +5,21 @@ from collections.abc import Callable
 
 
 class Tool:
-    def __init__(self, name, description, parameters, func: Callable, needs_approval=False):
+    def __init__(
+        self,
+        name,
+        description,
+        parameters,
+        func: Callable,
+        needs_approval=False,
+        approval_roles: set[str] | None = None,
+    ):
         self.name = name
         self.description = description
         self.parameters = parameters  # JSON schema
         self.func = func
         self.needs_approval = needs_approval
+        self.approval_roles = approval_roles or {"admin"}
 
     def openai_schema(self) -> dict:
         return {

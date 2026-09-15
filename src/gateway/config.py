@@ -36,9 +36,24 @@ class Settings:
     llm_model: str = _get("LLM_MODEL", "cx/gpt-5.6-luna")
 
     frappe_url: str = _get("FRAPPE_URL", "http://learning.test:8000").rstrip("/")
+    frappe_site_host: str = _get("FRAPPE_SITE_HOST", "lms.localhost")
     frappe_api_key: str = _get("FRAPPE_API_KEY", "")
     frappe_api_secret: str = _get("FRAPPE_API_SECRET", "")
     frappe_webhook_secret: str = _get("FRAPPE_WEBHOOK_SECRET", "")
+
+    public_origins: tuple[str, ...] = tuple(
+        origin.strip().rstrip("/")
+        for origin in _get(
+            "PUBLIC_ORIGINS",
+            "http://localhost:8080,http://lms.localhost:8080",
+        ).split(",")
+        if origin.strip()
+    )
+    identity_cache_ttl: int = int(_get("IDENTITY_CACHE_TTL", "60") or 60)
+    poll_interval_seconds: int = int(_get("POLL_INTERVAL_SECONDS", "900") or 900)
+    scheduler_timezone: str = _get("SCHEDULER_TIMEZONE", "Asia/Ho_Chi_Minh")
+    daily_plan_hour: int = int(_get("DAILY_PLAN_HOUR", "7") or 7)
+    transcript_retention_days: int = int(_get("TRANSCRIPT_RETENTION_DAYS", "90") or 90)
 
 
 settings = Settings()

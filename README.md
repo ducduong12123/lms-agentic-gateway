@@ -1,48 +1,43 @@
-# LMS Agentic Gateway (repo tách Frappe)
+# LMS Agentic Gateway
 
-Gateway đứng ngoài Frappe LMS. Frappe giữ nguyên, giao tiếp qua REST + Webhook.
-Widget là 1 file JS, nhúng vào Frappe bằng 1 thẻ `<script>`.
+External AI-native learning engine for Frappe LMS 2.62.1. Frappe remains the system of record;
+the engine communicates through existing REST methods and removable Webhook/User/Role records.
+No AI code is required inside the Frappe app.
 
+## Architecture
+
+```text
+Browser :8080 -> nginx -> /lms, /api, /assets -> Frappe :8000
+                      -> /ai/*                -> FastAPI :8001
+Frappe Webhooks -> durable inbox -> reread record -> evidence -> mastery
+Poller ----------^ (reconciliation after downtime)
 ```
-Người dùng -> Widget (<script>) -> Gateway :8001 -> Frappe REST :8000
-Frappe Webhook -> Gateway /webhook/frappe (HMAC)
+
+The proxy injects the Shadow DOM widget only into `/lms` HTML. Identity comes from the Frappe
+`sid` cookie and is verified server-side. Per-user reads use that session; sync and notifications
+use the least-privilege service account.
+
+## Implemented Features
+
+- Append-only evidence and recomputable concept mastery.
+- Draft concept extraction, question mapping, and teacher approval.
+- Personalized tutor prompt with route-aware lesson context and short/long memory.
+- Feynman mode, dialogue checks, scored external learning sessions, and soft review gates.
+- Opt-in 07:00 learning plans through Frappe `Notification Log`.
+- Teacher risk console with one-use approved messages.
+- Per-user erasure, transcript retention, request rate limiting, HMAC webhooks, and audit trails.
+
+## Run and Test
+
+```powershell
+Copy-Item .env.example .env
+$env:PYTHONPATH='src'
+python -m pytest -q
+python scripts/contract_check.py
+.\scripts\start.ps1
 ```
 
-## Runtime (code đơn, stdlib-only)
+Open `http://localhost:8080/lms`. Direct Frappe remains at `http://localhost:8000` and the engine
+at `http://127.0.0.1:8001/health`. Teacher and learner pages are `/ai/teacher` and `/ai/plan`.
 
-- `src/gateway/runtime/model_client.py` — OpenAI-compatible `/chat/completions` (Ollama/vLLM/OpenAI đều được)
-- `src/gateway/runtime/agent_loop.py` — vòng lặp đơn: chat -> tool -> chat (6 vòng), ép `member/_role`
-- `src/gateway/runtime/tool_registry.py` — LLM chỉ thấy business tool, không thấy CRUD generic
-- `src/gateway/runtime/policy.py` — 4 role: student/teacher/evaluator/admin
-- `src/gateway/runtime/approval.py` — human approval + audit sqlite
-- `src/gateway/connector/frappe_client.py` — wrapper REST duy nhất chạm Frappe
-- `src/gateway/api/server.py` — `/health /chat /approve/:id /webhook/frappe /widget/*.js`
-- `widget/agentic-copilot.js` — shell nhúng Frappe
-
-## List tools (LLM chỉ được gọi chỗ này)
-
-| Tool | Role | Ghi? | Map DocType thật |
-|---|---|---|---|
-| `search_courses` | all | đọc | LMS Course |
-| `get_course_outline` | student/teacher/admin | đọc | Course + Chapter Reference + Lesson Reference |
-| `get_lesson_context` | all | đọc, student-safe (lọc instructor_content/notes) | Course Lesson |
-| `get_my_progress` | student | đọc (member ép từ session) | LMS Enrollment + LMS Course Progress |
-| `get_batch_progress` | teacher/admin | đọc | LMS Batch Enrollment |
-| `find_at_risk_students` | teacher/admin | đọc | LMS Enrollment |
-| `get_quiz_submissions` | teacher/evaluator | đọc | LMS Quiz Submission |
-| `get_assignment_submissions` | teacher/evaluator | đọc | LMS Assignment Submission |
-| `draft_quiz` | teacher | nháp, không ghi | LMS Question + LMS Quiz (draft ngoài) |
-| `draft_assignment_feedback` | teacher/evaluator | nháp | LMS Assignment Submission |
-| `update_course_content_after_approval` | admin | **ghi, cần duyệt** | Course Lesson (atomic nhiều bước để agent_bridge sau) |
-
-Generic `list/get/create/update/call_method` nằm trong `FrappeClient`, KHÔNG expose cho LLM.
-
-## Chạy
-
-```bash
-copy .env.example .env
-python examples/chat_cli.py "demo"
-python tests/test_tools.py
-cd src && python -m gateway.api.server
-# -> http://127.0.0.1:8001/health
-```
+See [API contract](docs/API_CONTRACT.md) and [operations/privacy](docs/OPERATIONS.md).

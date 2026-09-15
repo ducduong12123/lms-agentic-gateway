@@ -1,0 +1,142 @@
+- generic [active] [ref=f6e1]:
+  - generic [ref=f6e2]:
+    - generic [ref=f6e3]:
+      - link "Skip to main content" [ref=f6e4] [cursor=pointer]:
+        - /url: "#main-content"
+      - generic [ref=f6e6]:
+        - generic [ref=f6e7]:
+          - button "Learning Administrator" [ref=f6e63] [cursor=pointer]:
+            - generic [ref=f6e13]:
+              - generic [ref=f6e14]: Learning
+              - generic [ref=f6e64]: Administrator
+          - generic [ref=f6e17]:
+            - navigation [ref=f6e19]:
+              - button "Trang chủ" [ref=f6e65] [cursor=pointer]
+              - button "Tìm kiếm Shortcut Control + K" [ref=f6e69] [cursor=pointer]:
+                - generic [ref=f6e30]:
+                  - generic [ref=f6e37]: Tìm kiếm
+                  - note "Shortcut Control + K" [ref=f6e73]:
+                    - generic [ref=f6e74]: Ctrl
+                    - generic [ref=f6e75]: K
+              - button "Thông báo" [ref=f6e76] [cursor=pointer]
+            - navigation [ref=f6e81]:
+              - button "Các khóa học" [ref=f6e83] [cursor=pointer]
+              - button "Chương trình" [ref=f6e91] [cursor=pointer]
+              - button "Lớp học" [ref=f6e100] [cursor=pointer]
+              - button "Chứng chỉ" [ref=f6e110] [cursor=pointer]
+              - button "Công việc" [ref=f6e118] [cursor=pointer]
+              - button "Thống kê" [ref=f6e126] [cursor=pointer]
+            - navigation [ref=f6e134]:
+              - button "Các bài kiểm tra" [ref=f6e136] [cursor=pointer]
+              - button "Bài tập" [ref=f6e144] [cursor=pointer]
+              - button "Bài tập lập trình" [ref=f6e152] [cursor=pointer]
+          - generic [ref=f6e160] [cursor=pointer]:
+            - generic [ref=f6e161]: Thêm
+            - button [ref=f6e165]
+        - generic [ref=f6e55]:
+          - generic [ref=f6e56]:
+            - generic [ref=f6e167] [cursor=pointer]
+            - generic [ref=f6e57] [cursor=pointer]
+          - img [ref=f6e58] [cursor=pointer]
+      - main [ref=f6e61]:
+        - generic [ref=f6e281]:
+          - generic [ref=f6e283]:
+            - generic [ref=f6e285]:
+              - link "Các khóa học" [ref=f6e286] [cursor=pointer]:
+                - /url: /lms/courses
+              - generic [aria-hidden] [ref=f6e288]: /
+              - link "A guide to Frappe Learning" [ref=f6e289] [cursor=pointer]:
+                - /url: /lms/courses/a-guide-to-frappe-learning
+            - generic [ref=f6e291]: Đã xuất bản
+          - generic [ref=f6e293]:
+            - tablist [ref=f6e294]:
+              - tab "Tổng quan" [selected] [ref=f6e297] [cursor=pointer]
+              - tab "Trang tổng quan" [ref=f6e299] [cursor=pointer]
+              - tab "Biên tập khóa học" [ref=f6e301] [cursor=pointer]
+              - tab "Thiết lập" [ref=f6e303] [cursor=pointer]
+            - tabpanel "Tổng quan" [ref=f6e305]:
+              - generic [ref=f6e307]:
+                - generic [ref=f6e308]:
+                  - generic [ref=f6e309]:
+                    - heading "A guide to Frappe Learning" [level=1] [ref=f6e310]
+                    - generic [ref=f6e311]:
+                      - link "Business" [ref=f6e312] [cursor=pointer]:
+                        - /url: /lms/courses?category=Business
+                      - generic [ref=f6e316]:
+                        - generic [ref=f6e319]: "4"
+                        - generic [ref=f6e320]: (1)
+                      - generic [ref=f6e322]: 3 Học viên
+                      - generic [ref=f6e326]:
+                        - img "Jannat Patel" [ref=f6e329]
+                        - link "Jannat Patel" [ref=f6e332] [cursor=pointer]:
+                          - /url: /lms/user/jannat
+                    - generic [ref=f6e333]:
+                      - generic [ref=f6e334]: Frappe
+                      - generic [ref=f6e335]: Demo
+                    - paragraph [ref=f6e336]: Learn the basics of Frappe Learning and how to get started with your very first course.
+                  - generic [ref=f6e337]:
+                    - generic [ref=f6e338]:
+                      - heading "Nội dung khóa học" [level=2] [ref=f6e339]
+                      - generic [ref=f6e340]: 3 phần · 5 bài học
+                    - generic [ref=f6e344]:
+                      - generic [ref=f6e345]:
+                        - button "Introduction 2" [expanded] [ref=f6e346] [cursor=pointer]:
+                          - generic "Introduction" [ref=f6e349]
+                          - generic [ref=f6e350]: "2"
+                        - generic [ref=f6e353]:
+                          - link "What are Learning Management Systems?" [ref=f6e355] [cursor=pointer]:
+                            - /url: /lms/courses/a-guide-to-frappe-learning?editLesson=1-1#editor
+                          - link "What is Frappe Learning?" [ref=f6e359] [cursor=pointer]:
+                            - /url: /lms/courses/a-guide-to-frappe-learning?editLesson=1-2#editor
+                      - button "Adding content to your lessons 2" [ref=f6e363] [cursor=pointer]:
+                        - generic "Adding content to your lessons" [ref=f6e366]
+                        - generic [ref=f6e367]: "2"
+                      - button "Assessments 1" [ref=f6e370] [cursor=pointer]:
+                        - generic "Assessments" [ref=f6e373]
+                        - generic [ref=f6e374]: "1"
+                  - generic [ref=f6e376]:
+                    - heading "Về khóa học này" [level=2] [ref=f6e377]
+                    - generic [ref=f6e378]:
+                      - text: "This course will cover the fundamentals of Frappe Learning, including how to create and manage courses, enroll students, and track progress. You will learn about the following key features of the app:"
+                      - heading "Key Features" [level=3] [ref=f6e379]
+                      - text: "1. Structured Learning: Design a course with a 3-level hierarchy, where your courses have chapters, and you can group your lessons within these chapters. This ensures that the context of each lesson is clearly defined by its chapter. 2. Live Classes: Group learners into batches based on courses and duration. You can then create Zoom live classes for these batches directly from the app. Learners can view all the live classes they need to attend as part of their batch. 3. Quizzes and Assignments: Create quizzes with single-choice, multiple-choice, or open-ended questions. Instructors can also add assignments that learners can submit as PDFs or documents. 4. Getting Certified: Once a learner completes the course or batch, you can grant them a certificate. The app provides an inbuilt certificate template that you can use as-is or customize by creating your own template. To know more about the app and its features,"
+                      - link "check out the documentation" [ref=f6e380] [cursor=pointer]:
+                        - /url: https://docs.frappe.io/learning
+                      - text: .
+                  - generic [ref=f6e381]:
+                    - generic [ref=f6e383]:
+                      - generic [ref=f6e386]: "4"
+                      - generic [ref=f6e387]: xếp hạng khóa học & 1 đánh giá của người dùng
+                    - article [ref=f6e389]:
+                      - link [ref=f6e390] [cursor=pointer]:
+                        - /url: /lms/user/ashley
+                        - img "Ashley Ippolito" [ref=f6e392]
+                      - generic [ref=f6e393]:
+                        - generic [ref=f6e394]:
+                          - link "Ashley Ippolito" [ref=f6e395] [cursor=pointer]:
+                            - /url: /lms/user/ashley
+                          - generic [ref=f6e396]: 14 ngày trước
+                        - paragraph [ref=f6e408]: This is a great course to get started with Frappe Learning. The content is well-structured and easy to follow.
+                - complementary [ref=f6e409]:
+                  - generic [ref=f6e410]:
+                    - iframe [ref=f6e412]
+                    - generic [ref=f6e413]:
+                      - generic [ref=f6e414]: Miễn phí
+                      - generic [ref=f6e415]:
+                        - generic [ref=f6e416]: "Khóa học này bao gồm:"
+                        - generic [ref=f6e417]: 3 đã đăng ký
+                        - generic [ref=f6e420]: Video khóa học theo yêu cầu
+                        - generic [ref=f6e423]: 5 Các bài học
+                        - generic [ref=f6e426]: 1 Chủ đề bài kiểm tra
+                  - generic [ref=f6e429]:
+                    - generic [ref=f6e430]: Người tạo khóa học
+                    - link "Jannat Patel Jannat Patel" [ref=f6e431] [cursor=pointer]:
+                      - /url: /lms/user/jannat
+                      - img "Jannat Patel" [ref=f6e433]
+                      - generic [ref=f6e434]: Jannat Patel
+            - tabpanel "Trang tổng quan"
+            - tabpanel "Biên tập khóa học"
+            - tabpanel "Thiết lập"
+    - region "Notifications alt+T":
+      - list
+  - button "✦" [ref=f6e62] [cursor=pointer]

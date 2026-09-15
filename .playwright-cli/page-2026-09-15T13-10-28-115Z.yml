@@ -1,0 +1,25 @@
+- generic [ref=f2e2]:
+  - banner
+  - generic [ref=f2e11]:
+    - navigation [ref=f2e12]:
+      - img "Logo ứng dụng" [ref=f2e14]
+      - button "Tìm kiếm Ctrl+K" [ref=f2e16] [cursor=pointer]:
+        - generic [ref=f2e17]: Tìm kiếm
+        - generic [ref=f2e20]: Ctrl+K
+      - generic [ref=f2e21]:
+        - button "Thông báo" [ref=f2e23] [cursor=pointer]
+        - button "Menu Người dùng" [ref=f2e26] [cursor=pointer]:
+          - generic "Administrator" [ref=f2e27]:
+            - generic "Administrator" [ref=f2e28]: A
+    - generic [ref=f2e31]:
+      - generic [ref=f2e32]:
+        - link [aria-hidden] [ref=f2e33] [cursor=pointer]:
+          - /url: /lms
+        - link "Học hỏi" [ref=f2e37] [cursor=pointer]:
+          - /url: /lms
+      - generic [ref=f2e38]:
+        - link [aria-hidden] [ref=f2e39] [cursor=pointer]:
+          - /url: /app/build
+        - link "Framework" [ref=f2e43] [cursor=pointer]:
+          - /url: /app/build
+  - contentinfo
