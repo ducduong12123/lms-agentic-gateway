@@ -1,0 +1,3 @@
+# Không bắt buộc. Runtime chạy bằng stdlib.
+# Chỉ cài khi muốn chạy server FastAPI thay vì stdlib (optional):
+# fastapi uvicorn httpx

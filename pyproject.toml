@@ -1,0 +1,22 @@
+# lms-agentic-gateway — Agentic Gateway tách khỏi Frappe
+#
+# Repo độc lập, Frappe LMS giữ nguyên. Gateway nói chuyện qua REST + Webhook.
+# Widget là 1 file JS nhúng được vào Frappe hiện tại qua 1 thẻ <script>.
+#
+# Chạy thử (chỉ cần Python 3.10+, không cần pip):
+#   copy .env.example .env   (sửa URL + key)
+#   python -m gateway.api.server          -> http://127.0.0.1:8001/health
+#   python examples/chat_cli.py "khóa python cơ bản có gì?"
+#
+# Nhúng widget vào Frappe (Desk / Website):
+#   <script src="http://127.0.0.1:8001/widget/agentic-copilot.js"
+#           data-gateway="http://127.0.0.1:8001" data-role="student"></script>
+
+[project]
+name = "lms-agentic-gateway"
+version = "0.1.0"
+description = "Agentic Gateway outside Frappe LMS + embeddable widget"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
