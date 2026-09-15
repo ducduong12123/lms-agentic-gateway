@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
-$wslHost = (wsl.exe -d Ubuntu -- sh -lc "awk '/^nameserver/{print `$2; exit}' /etc/resolv.conf").Trim()
+$nameServerLine = (wsl.exe -d Ubuntu -- cat /etc/resolv.conf | Select-String '^nameserver' | Select-Object -First 1).ToString()
+$wslHost = ($nameServerLine -split '\s+')[1].Trim()
 if (-not $wslHost) {
     throw "Cannot discover the Windows host address from WSL."
 }
