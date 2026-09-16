@@ -26,7 +26,7 @@ def test_model_cannot_override_private_args_or_member(tmp_path, monkeypatch):
             "dangerous",
             "write",
             {"type": "object"},
-            lambda args: executed.append(args),
+            lambda args: executed.append(dict(args)) if not args.get("dry_run") else None,
             needs_approval=True,
             approval_roles={"admin"},
         )

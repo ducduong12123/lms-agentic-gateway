@@ -133,11 +133,25 @@ def undo_action(action_id: str, frappe, member: str | None = None, path: Path | 
         result = frappe.delete_document(str(undo["doctype"]), str(undo["name"]))
     elif op == "restore":
         result = frappe.update_document(str(undo["doctype"]), str(undo["name"]), dict(undo.get("fields") or {}))
+    elif op == "restore_many":
+        applied = []
+        for entry in undo.get("restores") or []:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("delete"):
+                applied.append(frappe.delete_document(
+                    str(entry.get("doctype") or ""), str(entry.get("name") or ""),
+                ))
+            else:
+                applied.append(frappe.update_document(
+                    str(entry.get("doctype") or ""),
+                    str(entry.get("name") or ""),
+                    dict(entry.get("fields") or {}),
+                ))
+        result = {"ok": True, "restored": len(applied)}
     elif op in {"delete_review_set", "cancel_review"}:
         _local_undo(undo, record["member"])
         result = {"ok": True}
-    else:
-        raise ValueError("unsupported undo operation")
     if not mark_undone(action_id, path):
         raise ValueError("action was already undone")
     return {"action_id": action_id, "status": "undone", "result": result}

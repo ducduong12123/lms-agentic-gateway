@@ -8,6 +8,7 @@ from gateway.connector.frappe_client import FrappeClient
 from gateway.runtime import agent_loop, features
 from gateway.runtime.tool_registry import Tool, ToolRegistry
 from gateway.tools.catalog import build_registry
+from gateway.tools.envelope import action_result
 
 
 class FakeClient:
@@ -114,8 +115,8 @@ class UnexpectedClient:
 def test_save_intent_uses_durable_draft_and_creates_bound_approval(monkeypatch):
     captured = {}
 
-    def request(tool, args, requested_by, requested_role, required_roles):
-        captured.update({"tool": tool, "args": dict(args)})
+    def request(tool, args, requested_by, requested_role, required_roles, plan_id=None):
+        captured.update({"tool": tool, "args": dict(args), "plan_id": plan_id})
         return "approval-1"
 
     monkeypatch.setattr(agent_loop, "request_approval", request)
@@ -154,7 +155,7 @@ def test_save_intent_uses_durable_draft_and_creates_bound_approval(monkeypatch):
     assert result["actions"][0]["approval_id"] == "approval-1"
 
 
-def test_approval_modes_gate_only_the_requested_risk(monkeypatch):
+def test_write_preview_is_safe_and_always_requires_plan_approval(monkeypatch):
     approvals = []
     executions = []
     monkeypatch.setattr(
@@ -163,13 +164,17 @@ def test_approval_modes_gate_only_the_requested_risk(monkeypatch):
         lambda tool, args, **kwargs: approvals.append((tool, dict(args))) or f"approval-{len(approvals)}",
     )
     registry = ToolRegistry()
+    def preview_tool(args):
+        if args.get("dry_run"):
+            return action_result(
+                "manage_course", "Xem trước", "Xem trước thay đổi.",
+                status="pending_approval", reversibility="reversible",
+            )
+        executions.append(dict(args))
+        return {"ok": True}
     registry.register(Tool(
-        "manage_course",
-        "mutate",
-        {"type": "object"},
-        lambda args: executions.append(dict(args)) or {"ok": True},
-        needs_approval=True,
-        approval_roles={"teacher", "admin"},
+        "manage_course", "mutate", {"type": "object"}, preview_tool,
+        needs_approval=True, approval_roles={"teacher", "admin"},
     ))
     allowed = ["manage_course"]
 
@@ -200,13 +205,11 @@ def test_approval_modes_gate_only_the_requested_risk(monkeypatch):
         {"user": "teacher@test.com", "approval_mode": "full_access"},
     )
 
-    assert ask_result["status"] == unsafe_result["status"] == elevated_result["status"] == "pending_approval"
+    assert ask_result["status"] == auto_result["status"] == unsafe_result["status"] == full_result["status"] == elevated_result["status"] == "pending_approval"
     assert ask_approval["approval_id"] == "approval-1"
-    assert unsafe_approval["approval_id"] == "approval-2"
-    assert elevated_approval["approval_id"] == "approval-3"
-    assert auto_result == full_result == {"ok": True}
-    assert auto_approval is full_approval is None
-    assert [item["operation"] for item in executions] == ["update", "delete"]
+    assert unsafe_approval["approval_id"] == "approval-3"
+    assert elevated_approval["approval_id"] == "approval-5"
+    assert [item["operation"] for item in executions] == []
 
 
 class AmbiguousWorkflowClient:

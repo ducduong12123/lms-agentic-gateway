@@ -28,6 +28,7 @@ def _conn() -> sqlite3.Connection:
         "approved_at": "REAL",
         "executed_at": "REAL",
         "result": "TEXT",
+        "plan_id": "TEXT",
     }
     for name, column_type in additions.items():
         if name not in existing:
@@ -42,21 +43,21 @@ def _conn() -> sqlite3.Connection:
     conn.commit()
     return conn
 
-
 def request_approval(
     tool: str,
     args: dict,
     requested_by: str,
     requested_role: str,
     required_roles: set[str] | None = None,
+    plan_id: str | None = None,
 ) -> str:
     approval_id = uuid.uuid4().hex
     roles = sorted(required_roles or {"admin"})
     with _conn() as conn:
         conn.execute(
             "INSERT INTO approvals "
-            "(id, tool, args, status, created, requested_by, requested_role, required_roles) "
-            "VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)",
+            "(id, tool, args, status, created, requested_by, requested_role, required_roles, plan_id) "
+            "VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
             (
                 approval_id,
                 tool,
@@ -65,6 +66,7 @@ def request_approval(
                 requested_by,
                 requested_role,
                 json.dumps(roles),
+                str(plan_id or "") or None,
             ),
         )
     return approval_id
@@ -89,7 +91,11 @@ def approve(approval_id: str, approved_by: str, approver_role: str) -> dict | No
         )
         if updated.rowcount != 1:
             return None
-        return {"id": row["id"], "tool": row["tool"], "args": json.loads(row["args"])}
+        stored_plan = row["plan_id"] if "plan_id" in row.keys() else ""
+        return {
+            "id": row["id"], "tool": row["tool"], "args": json.loads(row["args"]),
+            "plan_id": str(stored_plan or ""),
+        }
 
 
 def mark_executed(approval_id: str, result) -> None:
@@ -124,7 +130,7 @@ def audit(role: str, tool: str, args: dict, result, actor: str = "") -> None:
 def pending_for(role: str, member: str) -> list[dict]:
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT id,tool,args,status,created,requested_by,required_roles "
+            "SELECT id,tool,args,status,created,requested_by,required_roles,plan_id "
             "FROM approvals WHERE status='pending' AND (requested_by=? OR required_roles LIKE ?)"
             " ORDER BY created DESC LIMIT 50",
             (member, f'%\"{role}\"%'),
@@ -134,5 +140,6 @@ def pending_for(role: str, member: str) -> list[dict]:
         item = dict(row)
         item["args"] = json.loads(item.pop("args") or "{}")
         item["required_roles"] = json.loads(item["required_roles"] or "[]")
+        item["plan_id"] = str(item.get("plan_id") or "")
         out.append(item)
     return out

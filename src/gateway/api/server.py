@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from gateway.api.webhook import handle_event, verify_signature
 from gateway.config import settings
 from gateway.connector.frappe_client import FrappeClient
+from gateway.runtime import plan_apply, write_plans
 from gateway.runtime.agent_loop import learner_context_for_prompt, run_agent, run_agent_stream
 from gateway.runtime import actions, runs
 from gateway.runtime.approval import mark_executed, pending_for
@@ -30,6 +31,7 @@ from gateway.runtime.model_client import OpenAICompatClient
 from gateway.runtime.route_adapter import load_lesson_context, resolve_lms_context
 from gateway.runtime.scheduler import ProactiveWorker
 from gateway.tools.catalog import build_registry
+from gateway.tools import plan_executors
 
 ROOT = Path(__file__).resolve().parents[3]
 WIDGET_DIR = ROOT / "widget"
@@ -99,10 +101,17 @@ class FeedbackPayload(BaseModel):
 class PreferencePayload(BaseModel):
     daily_plan_opt_in: bool
     quiet_hours: str = Field(default="", max_length=128)
-class ReviewAnswerPayload(BaseModel):
-    item_id: str = Field(min_length=1, max_length=128)
-    answer: str = Field(default="", max_length=12000)
 
+
+class ApprovalItemDecision(BaseModel):
+    id: str = Field(min_length=1, max_length=128)
+    status: str = Field(default="approved", pattern="^(approved|rejected|pending)$")
+    payload: dict = Field(default_factory=dict)
+
+
+class ApprovalDecision(BaseModel):
+    items: list[ApprovalItemDecision] | None = None
+    typed_confirm: str = Field(default="", max_length=256)
 
 
 class TeacherActionPayload(BaseModel):
@@ -561,8 +570,55 @@ def approve_action(
     approval_id: str,
     request: Request,
     identity: Identity = Depends(trusted_identity),
+    decision: ApprovalDecision | None = None,
+) -> dict:
+    body_decision = decision
+    if body_decision is None:
+        try:
+            payload = request.scope.get("fastapi_body") or {}
+        except Exception:
+            payload = {}
+        if isinstance(payload, dict) and (payload.get("items") is not None or payload.get("typed_confirm")):
+            try:
+                body_decision = ApprovalDecision.model_validate(payload)
+            except Exception:
+                body_decision = None
+    return _execute_approval(approval_id, body_decision, request, identity)
+
+
+@app.patch("/approvals/{approval_id}")
+def update_approval_items(
+    approval_id: str,
+    decision: ApprovalDecision,
+    request: Request,
+    identity: Identity = Depends(trusted_identity),
 ) -> dict:
     _require_same_origin(request)
+    try:
+        record = claim_approval(approval_id, identity.user, identity.role)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if not record or not record.get("plan_id"):
+        raise HTTPException(status_code=404, detail="plan approval not found")
+    plan = write_plans.get_plan(str(record.get("plan_id") or ""))
+    if not plan or plan.get("status") != "pending":
+        raise HTTPException(status_code=409, detail="plan is no longer editable")
+    items = [item.model_dump() for item in (decision.items or [])]
+    updated = plan
+    for entry in items:
+        item_id = str(entry.get("id") or "")
+        payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
+        status = str(entry.get("status") or "")
+        if payload:
+            updated = write_plans.patch_item(str(plan.get("id") or ""), item_id, payload) or updated
+        if status in {"approved", "rejected", "pending"}:
+            updated = write_plans.set_item_status(str(plan.get("id") or ""), item_id, status) or updated
+    return {"ok": True, "plan": updated}
+
+
+def _execute_approval(approval_id: str, decision: ApprovalDecision | None, request: Request, identity: Identity) -> dict:
+    _require_same_origin(request)
+    frappe = _base_frappe().with_session(identity.sid)
     _, registry = _deps(identity)
     try:
         record = claim_approval(approval_id, identity.user, identity.role)
@@ -574,6 +630,9 @@ def approve_action(
     tool = registry.get(record["tool"])
     if not tool or not tool.needs_approval or identity.role not in tool.approval_roles:
         raise HTTPException(status_code=403, detail="tool cannot be approved by this identity")
+    plan = write_plans.get_plan(str(record.get("plan_id") or "")) if record.get("plan_id") else None
+    payload_items = [item.model_dump() for item in (decision.items if decision and decision.items else [])] if decision else None
+    typed_confirm = str(decision.typed_confirm if decision else "") or ""
     args = {
         key: value
         for key, value in dict(record["args"] or {}).items()
@@ -582,7 +641,12 @@ def approve_action(
     args["member"] = identity.user
     args["_role"] = identity.role
     try:
-        result = tool.func(args)
+        if plan and plan.get("status") == "pending" and str(plan.get("tool") or "") == record["tool"]:
+            result = _apply_write_plan(frappe, record["tool"], plan, payload_items, typed_confirm, identity)
+        else:
+            result = tool.func(args)
+    except ValueError as exc:
+        result = {"error": str(exc)}
     except Exception as exc:
         result = {"error": str(exc)}
     if isinstance(result, dict) and result.get("kind") == "action":
@@ -616,6 +680,54 @@ def approve_action(
         "resume": bool(resumed) and "error" not in result,
         "resume_message": "Tiếp tục kế hoạch sau khi thao tác vừa được duyệt.",
     }
+
+
+def _apply_write_plan(frappe, tool_name: str, plan: dict, payload_items, typed_confirm: str, identity: Identity) -> dict:
+    operation = str((plan.get("args") or {}).get("operation") or "")
+    reversibility = str(plan.get("reversibility") or "irreversible")
+    if write_plans.requires_typed_confirm(tool_name, operation, reversibility):
+        expected = str((plan.get("args") or {}).get("course") or (plan.get("args") or {}).get("chapter") or (plan.get("args") or {}).get("lesson") or (plan.get("args") or {}).get("quiz") or (plan.get("args") or {}).get("name") or "")
+        if expected and typed_confirm.strip() != expected:
+            write_plans.mark_plan_status(str(plan.get("id") or ""), "failed")
+            return {"error": f"xác nhận '{expected}' chưa đúng; thao tác nguy hiểm đã bị chặn"}
+    selected, merged = plan_apply.apply_plan_selection(plan, payload_items)
+    for item_id in [str(entry.get("id") or "") for entry in selected]:
+        write_plans.set_item_status(str(plan.get("id") or ""), item_id, "approved")
+    for entry in plan.get("items") or []:
+        if isinstance(entry, dict) and str(entry.get("id") or "") not in {str(item.get("id") or "") for item in selected}:
+            write_plans.set_item_status(str(plan.get("id") or ""), str(entry.get("id") or ""), "rejected")
+    if not selected:
+        write_plans.mark_plan_status(str(plan.get("id") or ""), "rejected")
+        return {"kind": "action", "action": tool_name, "status": "noop", "title": "Đã bỏ toàn bộ kế hoạch", "summary": "Không có mục nào được duyệt nên không ghi gì vào LMS.", "changes": [], "undo": {"available": False, "expires_at": None}, "view": None}
+    if tool_name == "manage_course" and operation == "update":
+        result = plan_executors.apply_manage_course_update(frappe, plan, merged)
+    elif tool_name == "manage_chapter" and operation == "update":
+        result = plan_executors.apply_manage_chapter_update(frappe, plan, merged)
+    elif tool_name == "manage_chapter" and operation == "reorder":
+        result = plan_executors.apply_manage_chapter_reorder(frappe, plan, merged)
+    elif tool_name == "manage_lesson" and operation == "update":
+        result = plan_executors.apply_manage_lesson_update(frappe, plan, merged)
+    elif tool_name == "manage_lesson" and operation == "reorder":
+        result = plan_executors.apply_manage_lesson_reorder(frappe, plan, merged)
+    elif tool_name == "manage_lesson_block":
+        result = plan_executors.apply_manage_lesson_block(frappe, plan, merged)
+    elif tool_name == "manage_quiz" and operation == "update":
+        result = plan_executors.apply_manage_quiz_update(frappe, plan, merged)
+    elif tool_name in {"manage_assignment", "manage_programming_exercise"} and operation == "update":
+        allowed = {"title", "question", "type", "course", "grade_assignment", "show_answer", "answer"} if tool_name == "manage_assignment" else {"title", "problem_statement", "language", "test_cases"}
+        doctype = "LMS Assignment" if tool_name == "manage_assignment" else "LMS Programming Exercise"
+        result = plan_executors.apply_simple_update(frappe, action=tool_name, doctype=doctype, allowed=allowed, plan=plan, merged=merged)
+    else:
+        write_plans.mark_plan_status(str(plan.get("id") or ""), "failed")
+        return {"error": f"kế hoạch {tool_name}/{operation} chưa hỗ trợ apply từng mục an toàn"}
+    refreshed = write_plans.get_plan(str(plan.get("id") or ""))
+    rejected = [entry for entry in (refreshed or {}).get("items", []) if isinstance(entry, dict) and str(entry.get("status") or "") == "rejected"] if refreshed else []
+    write_plans.mark_plan_status(str(plan.get("id") or ""), "partially_applied" if rejected else "applied")
+    if isinstance(result, dict):
+        result["plan_id"] = str(plan.get("id") or "")
+        result["applied_items"] = [str(entry.get("id") or "") for entry in selected]
+        result["rejected_items"] = [str(entry.get("id") or "") for entry in rejected]
+    return result
 
 
 @app.post("/webhook/frappe")

@@ -11,8 +11,8 @@ from .approval import audit, request_approval
 from .learner import concepts_for_lesson, format_learner_block, weak_concepts
 from .policy import allowed_tools
 from .long_memory import format_memories_block
-from .tool_bundles import plan_request, summary_for_tools
-from ..tools.envelope import action_result
+from .tool_bundles import plan_request, summary_for_tools, write_reversibility
+from ..tools.envelope import action_result, reversibility_contract_label
 from .trace import trace as _trace
 
 
@@ -288,18 +288,8 @@ _AUTO_APPROVAL_HIGH_RISK_TOOLS = {"message_students", "create_live_class"}
 
 
 def _requires_approval(tool_name: str, args: dict, mode: str) -> bool:
-    """Apply the user's per-request approval policy without weakening role/DocPerm checks."""
-    if mode == "full_access":
-        return False
-    if mode != "auto":
-        return True
-    if tool_name in _AUTO_APPROVAL_HIGH_RISK_TOOLS:
-        return True
-    if str(args.get("operation") or "").casefold() == "delete":
-        return True
-    if tool_name == "manage_course" and int(args.get("published") or 0) == 1:
-        return True
-    return False
+    """Tier-1 plan→apply: every write verb needs an explicit plan approval."""
+    return True
 
 
 def _run_tool(registry, allowed: list, role: str, name: str, args: dict, context: dict):
@@ -326,21 +316,39 @@ def _run_tool(registry, allowed: list, role: str, name: str, args: dict, context
         role not in tool.approval_roles
         or _requires_approval(name, args, str(context.get("approval_mode") or "ask"))
     ):
+        try:
+            preview_args = {**args, "dry_run": True}
+            preview_out = tool.func(preview_args)
+            if any(str(key).startswith("_") for key in preview_args if key not in args):
+                raise ValueError("preview must not introduce private args")
+        except Exception as exc:  # noqa: BLE001 - preview loi van phai co approval an toan
+            preview_out = {"error": str(exc)}
+        if not isinstance(preview_out, dict) or preview_out.get("kind") != "action":
+            preview_out = action_result(
+                name,
+                "Cần phê duyệt",
+                "Thao tác này sẽ được thực hiện sau khi người có quyền duyệt.",
+                status="pending_approval",
+            )
+        out = preview_out
+        plan_id = str(out.get("plan_id") or "")
         aid = request_approval(
             name,
             args,
             requested_by=str(context.get("user") or ""),
             requested_role=role,
             required_roles=tool.approval_roles,
+            plan_id=plan_id or None,
         )
-        out = action_result(
-            name,
-            "Cần phê duyệt",
-            "Thao tác này sẽ được thực hiện sau khi người có quyền duyệt.",
-            status="pending_approval",
-        )
+        out = dict(out)
         out["needs_approval"] = True
         out["approval_id"] = aid
+        if plan_id and not out.get("plan_id"):
+            out["plan_id"] = plan_id
+        if not out.get("reversibility"):
+            fallback = getattr(tool, "reversibility", "") or write_reversibility(name)
+            out["reversibility"] = fallback
+            out["reversibility_label"] = reversibility_contract_label(fallback)
         _track_output(context, name, out, args)
         if step_id:
             runs.finish_step(step_id, out, "waiting_approval", aid)

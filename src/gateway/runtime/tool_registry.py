@@ -15,6 +15,7 @@ class Tool:
         approval_roles: set[str] | None = None,
         bundles: set[str] | None = None,
         risk: str = "read",
+        reversibility: str = "irreversible",
     ):
         self.name = name
         self.description = description
@@ -24,6 +25,7 @@ class Tool:
         self.approval_roles = approval_roles or {"admin"}
         self.bundles = set(bundles or ())
         self.risk = risk
+        self.reversibility = reversibility
 
     def openai_schema(self) -> dict:
         return {

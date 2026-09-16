@@ -139,6 +139,7 @@
     "#acp-insight[hidden]{display:none}#acp-insight b{color:#fff}#acp-insight button{margin:8px 6px 0 0;border:1px solid #3c665b;background:transparent;color:#bfe2d6;border-radius:7px;padding:5px 8px;cursor:pointer}",
     ".acp-ap{margin-top:10px;border:1px solid #554507;background:#221d0c;border-radius:8px;padding:10px;color:#e7c96f;font-size:12.5px}",
     ".acp-ap button{margin-top:8px;background:#2f81f7;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600}",
+    ".acp-plan-review{margin:8px 0 2px;border:1px solid #2c2c2c;border-radius:8px;overflow:hidden}.acp-plan-item{padding:8px;border-top:1px solid #242424}.acp-plan-item:first-child{border-top:0}.acp-plan-item h5{margin:0 0 4px;font-size:12.5px;color:#eee}.acp-plan-item pre{margin:6px 0 0;background:#181818;border:1px solid #2c2c2c;border-radius:6px;padding:7px;color:#cfcfcf;font-size:11.5px;white-space:pre-wrap}.acp-plan-item textarea{width:100%;box-sizing:border-box;margin-top:6px;background:#181818;color:#eee;border:1px solid #333;border-radius:6px;padding:7px;font:inherit;font-size:12px}.acp-plan-item .row{display:flex;gap:6px;margin-top:7px}.acp-plan-item button{background:#2f81f7;color:#fff;border:0;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}.acp-plan-item button.secondary{background:transparent;color:#bbb;border:1px solid #3a3a3a}.acp-plan-item .status{margin-left:6px;font-size:11px;color:#999}.acp-reversibility{display:inline-block;margin:6px 0 0;padding:2px 8px;border-radius:20px;font-size:11px;border:1px solid #444;color:#ddd}.acp-reversibility.reversible{border-color:#2f6f4f;color:#9fe0bd}.acp-reversibility.compensating{border-color:#554507;color:#e7c96f}.acp-reversibility.irreversible{border-color:#6e2b2b;color:#f0a8a8}",
     "#acp-type{display:none;padding:0 20px 8px;background:#111;color:#777;font-size:12px}",
     "#acp-type i{display:inline-block;width:4px;height:4px;border-radius:50%;background:#777;margin-right:3px;animation:acpb 1s infinite}",
     "@keyframes acpb{0%,100%{opacity:.25}50%{opacity:1}}",
@@ -621,16 +622,25 @@
     var h = document.createElement("h4"); h.textContent = card.title || card.action || "Đã thực hiện";
     var p = document.createElement("p"); p.textContent = card.summary || "";
     box.appendChild(h); box.appendChild(p);
+    if (card.reversibility) {
+      var badge = document.createElement("span");
+      badge.className = "acp-reversibility " + card.reversibility;
+      badge.textContent = card.reversibility_label || card.reversibility;
+      box.appendChild(badge);
+    }
     var undo = card.undo || {};
+    if (card.preview) {
+      var preview = document.createElement("pre");
+      preview.textContent = String(card.preview).slice(0, 1200);
+      box.appendChild(preview);
+    }
     if ((card.changes || []).length) {
       var ul = document.createElement("ul"); ul.className = "acp-action-changes";
       card.changes.forEach(function (change) { var li = document.createElement("li"); li.textContent = actionChangeText(change); ul.appendChild(li); });
       box.appendChild(ul);
     }
     if (card.status === "pending_approval" && card.approval_id) {
-      var approveBtn = document.createElement("button"); approveBtn.textContent = "Duyệt & chạy";
-      approveBtn.onclick = function () { approve(card.approval_id, approveBtn); };
-      box.appendChild(approveBtn);
+      renderPlanReview(box, card);
     }
     var expiresAt = Number(undo.expires_at || 0);
     if (undo.available && card.status === "done" && (!expiresAt || expiresAt > Date.now() / 1000)) {
@@ -651,6 +661,78 @@
       box.appendChild(openBtn);
     }
     target.appendChild(box);
+  }
+  function renderPlanReview(box, card) {
+    var review = document.createElement("div");
+    review.className = "acp-plan-review";
+    var state = { rejected: {}, edits: {} };
+    (card.items || []).forEach(function (item) {
+      var wrap = document.createElement("div");
+      wrap.className = "acp-plan-item";
+      wrap.dataset.itemId = item.id || "";
+      var title = document.createElement("h5");
+      title.textContent = item.label || item.id || "Mục thay đổi";
+      wrap.appendChild(title);
+      var beforeAfter = document.createElement("pre");
+      beforeAfter.textContent = JSON.stringify(item.preview || item.payload || {}, null, 2).slice(0, 1200);
+      wrap.appendChild(beforeAfter);
+      var status = document.createElement("span");
+      status.className = "status";
+      status.textContent = "Chờ duyệt";
+      if (card.requires_edit_review) {
+        var editor = document.createElement("textarea");
+        editor.rows = 3;
+        editor.value = JSON.stringify(item.payload || {}, null, 2);
+        editor.onchange = function () {
+          try { state.edits[item.id] = JSON.parse(editor.value || "{}"); }
+          catch (e) { state.edits[item.id] = {}; }
+          patchPlanItem(card, item.id, state.edits[item.id], status);
+        };
+        wrap.appendChild(editor);
+      }
+      var row = document.createElement("div");
+      row.className = "row";
+      var keep = document.createElement("button");
+      keep.textContent = "Giữ mục này";
+      keep.onclick = function () { delete state.rejected[item.id]; status.textContent = "Sẽ áp dụng"; };
+      var drop = document.createElement("button");
+      drop.className = "secondary";
+      drop.textContent = "Bỏ mục này";
+      drop.onclick = function () { state.rejected[item.id] = true; status.textContent = "Sẽ bỏ qua"; };
+      row.appendChild(keep); row.appendChild(drop); row.appendChild(status);
+      wrap.appendChild(row);
+      review.appendChild(wrap);
+    });
+    if (card.typed_confirm) {
+      var confirm = document.createElement("textarea");
+      confirm.rows = 1;
+      confirm.placeholder = "Gõ '" + card.typed_confirm + "' để xác nhận thao tác nguy hiểm";
+      confirm.dataset.typedConfirm = "";
+      review.appendChild(confirm);
+    }
+    var approveBtn = document.createElement("button");
+    approveBtn.textContent = "Duyệt các mục đã chọn & chạy";
+    approveBtn.onclick = function () { approvePlan(card, review, state, approveBtn); };
+    box.appendChild(review);
+    box.appendChild(approveBtn);
+  }
+  function patchPlanItem(card, itemId, payload, statusEl) {
+    if (!card.approval_id || !payload) return;
+    fetch(GATEWAY + "/approvals/" + encodeURIComponent(card.approval_id), {
+      method: "PATCH", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: [{ id: itemId, payload: payload }] }),
+    }).then(function (r) {
+      if (statusEl) statusEl.textContent = r.ok ? "Đã lưu bản sửa" : "Lưu bản sửa lỗi";
+    }).catch(function () { if (statusEl) statusEl.textContent = "Lưu bản sửa lỗi"; });
+  }
+  function approvePlan(card, review, state, btn) {
+    var decisions = (card.items || []).map(function (item) {
+      return { id: item.id, status: state.rejected[item.id] ? "rejected" : "approved", payload: state.edits[item.id] || {} };
+    });
+    var typed = "";
+    var confirmBox = review.querySelector("[data-typed-confirm]");
+    if (confirmBox) typed = confirmBox.value || "";
+    approve(card.approval_id, btn, { items: decisions, typed_confirm: typed });
   }
   function showCanvas(title) {
     canvasTitle.textContent = title || "Agentic view";
@@ -741,9 +823,12 @@
       renderView(directive.spec);
     }
   }
-  function approve(id, btn) {
+  function approve(id, btn, decision) {
     btn.disabled = true; btn.textContent = "…";
-    fetch(GATEWAY + "/approve/" + encodeURIComponent(id), { method: "POST", credentials: "same-origin" })
+    fetch(GATEWAY + "/approve/" + encodeURIComponent(id), {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(decision || {}),
+    })
       .then(function (r) {
         return r.text().then(function (text) {
           var payload = {};
@@ -1007,9 +1092,9 @@
     pop.classList.add("show");
   }
   var APPROVAL_MODES = [
-    { value: "ask", icon: "shieldCheck", label: "Hỏi trước khi làm", short: "Hỏi trước", description: "Luôn yêu cầu bạn duyệt trước mọi thao tác thay đổi." },
-    { value: "auto", icon: "circleDot", label: "Tự duyệt cho tôi", short: "Tự duyệt", description: "Tự chạy thay đổi thường; vẫn hỏi khi xóa, gửi thông báo, tạo lớp hoặc xuất bản khóa học." },
-    { value: "full_access", icon: "triangleAlert", label: "Toàn quyền", short: "Toàn quyền", description: "Không hỏi lại. AI được dùng mọi tool trong quyền LMS của tài khoản.", danger: true }
+    { value: "ask", icon: "shieldCheck", label: "Duyệt từng bản xem trước", short: "Duyệt từng mục", description: "Mọi thay đổi đều tạo bản xem trước; bạn duyệt, sửa hoặc bỏ từng mục." },
+    { value: "auto", icon: "circleDot", label: "Duyệt theo kế hoạch", short: "Theo kế hoạch", description: "Vẫn tạo bản xem trước cho mọi thay đổi và chờ bạn duyệt kế hoạch." },
+    { value: "full_access", icon: "triangleAlert", label: "Duyệt theo kế hoạch", short: "Theo kế hoạch", description: "Chế độ cũ đã tắt vì lý do an toàn; mọi thay đổi vẫn cần duyệt.", danger: true }
   ];
   function approvalStorageKey() {
     return "acp-approval-mode:" + String(CURRENT_IDENTITY.user || "Guest");

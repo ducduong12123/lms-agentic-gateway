@@ -61,6 +61,14 @@ def client_directive(op: str, **kwargs) -> dict:
     raise ValueError(f"unsupported client operation: {op}")
 
 
+def reversibility_contract_label(reversibility: str) -> str:
+    return {
+        "reversible": "Lùi được",
+        "compensating": "Bù trừ được",
+        "irreversible": "Không lùi được",
+    }.get(str(reversibility or ""), "Không lùi được")
+
+
 def action_result(
     action: str,
     title: str,
@@ -69,6 +77,12 @@ def action_result(
     undo: dict | None = None,
     view: dict | None = None,
     status: str = "done",
+    plan_id: str | None = None,
+    items: list[dict] | None = None,
+    requires_edit_review: bool = False,
+    preview: str | None = None,
+    reversibility: str | None = None,
+    typed_confirm: str | None = None,
 ) -> dict:
     if status not in {"done", "pending_approval", "noop", "failed"}:
         raise ValueError(f"unsupported action status: {status}")
@@ -77,7 +91,7 @@ def action_result(
     if undo and status == "done":
         normalized_undo = {**undo, "available": True, "expires_at": undo.get("expires_at", time.time() + 600)}
     normalized_view = validate_view_spec(view) if view else None
-    return {
+    result = {
         "kind": "action",
         "action": str(action),
         "action_id": action_id,
@@ -88,3 +102,24 @@ def action_result(
         "undo": normalized_undo or {"available": False, "expires_at": None},
         "view": normalized_view,
     }
+    if status == "pending_approval":
+        normalized_reversibility = str(reversibility or "")
+        if normalized_reversibility not in {"reversible", "compensating", "irreversible"}:
+            normalized_reversibility = "irreversible" if not normalized_undo else "reversible"
+        normalized_items = []
+        for index, raw_item in enumerate(list(items or [])):
+            item = dict(raw_item or {})
+            item.setdefault("id", f"item_{index + 1}")
+            item.setdefault("status", "pending")
+            normalized_items.append(item)
+        result.update({
+            "plan_id": str(plan_id or ""),
+            "items": normalized_items,
+            "requires_edit_review": bool(requires_edit_review),
+            "preview": str(preview or summary or ""),
+            "reversibility": normalized_reversibility,
+            "reversibility_label": reversibility_contract_label(normalized_reversibility),
+        })
+        if typed_confirm:
+            result["typed_confirm"] = str(typed_confirm)
+    return result

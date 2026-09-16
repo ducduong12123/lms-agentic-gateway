@@ -16,8 +16,8 @@ def test_widget_does_not_claim_identity():
     assert '"ask"' in source
     assert '"auto"' in source
     assert '"full_access"' in source
-    assert "Hỏi trước khi làm" in source
-    assert "Toàn quyền" in source
+    assert "Duyệt từng bản xem trước" in source
+    assert "Theo kế hoạch" in source
     assert ":host{--acp-surface:var(--surface-base" in source
     assert "data-theme" in source
     assert "MutationObserver(syncLmsTheme)" in source
@@ -46,6 +46,8 @@ def test_widget_does_not_claim_identity():
     assert 'ev.t === "plan_step"' in source
     assert 'ev.t === "thought"' not in source
     assert "Tóm tắt quá trình thực hiện" in source
-    assert 'id="acp-queue"' not in source
-    assert "refreshQueue" not in source
-    assert "acp-fab-badge" not in source
+    assert "acp-plan-review" in source
+    assert "renderPlanReview" in source
+    assert "approvePlan" in source
+    assert "typed_confirm" in source
+    assert "acp-reversibility" in source

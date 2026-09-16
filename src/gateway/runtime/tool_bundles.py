@@ -65,6 +65,34 @@ _MUTATING = {
     "message_students", "create_live_class",
 }
 
+_WRITE_REVERSIBILITY = {
+    "update_course_content_after_approval": "reversible",
+    "publish_lesson_draft": "compensating",
+    "manage_course": "irreversible",
+    "manage_chapter": "irreversible",
+    "manage_lesson": "irreversible",
+    "manage_lesson_block": "reversible",
+    "manage_quiz": "compensating",
+    "manage_assignment": "compensating",
+    "manage_programming_exercise": "compensating",
+    "remember_user_fact": "reversible",
+    "forget_user_fact": "irreversible",
+    "record_feedback_correction": "reversible",
+    "enroll_course": "compensating",
+    "mark_lesson_complete": "reversible",
+    "save_note": "compensating",
+    "create_review_set": "compensating",
+    "schedule_review": "compensating",
+    "set_goal": "reversible",
+    "message_students": "irreversible",
+    "create_live_class": "compensating",
+}
+
+
+def write_reversibility(tool_name: str) -> str:
+    """Default honest reversibility class for a mutating tool."""
+    return _WRITE_REVERSIBILITY.get(str(tool_name or ""), "irreversible")
+
 
 def configure_registry(registry: ToolRegistry) -> None:
     """Attach bundle/risk metadata and reject drift at startup."""
@@ -80,6 +108,7 @@ def configure_registry(registry: ToolRegistry) -> None:
         tool = registry.get(name)
         if tool is not None:
             tool.risk = "write"
+            tool.reversibility = _WRITE_REVERSIBILITY.get(name, "irreversible")
 
 
 def _plain(value: str) -> str:
