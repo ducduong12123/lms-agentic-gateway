@@ -212,7 +212,37 @@
     "#acp-fab{background:var(--acp-ink);color:var(--acp-surface);border-color:var(--acp-border)}#acp-fab:hover{background:var(--acp-ink-muted)}",
     ".acp-effort-current{color:var(--acp-accent)}.acp-effort-model{color:var(--acp-ink-muted)}.acp-effort-reset{color:var(--acp-ink-muted)!important}",
     ".acp-composer{background:var(--acp-surface);border-color:var(--acp-border)}#acp-pop.acp-effort-pop{background:var(--acp-surface);border-color:var(--acp-border)}.acp-effort-range input::-webkit-slider-runnable-track{background:linear-gradient(90deg,var(--acp-accent) var(--effort-fill,78%),var(--acp-surface-raised) var(--effort-fill,78%))}.acp-effort-range input::-moz-range-track{background:var(--acp-surface-raised)}.acp-effort-range input::-moz-range-progress{background:var(--acp-accent)}",
+    ":host{font-family:InterVar,ui-sans-serif,system-ui,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\",\"Segoe UI Symbol\",\"Noto Color Emoji\"}",
+    "#acp-side,#acp-side *,#acp-canvas,#acp-canvas *{font-family:inherit}",
+    ".acp-icon{display:inline-block;width:14px;height:14px;flex:0 0 auto;overflow:visible;vertical-align:middle;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;fill:none}",
+    "#acp-fab .acp-icon{width:18px;height:18px}#acp-head-main .acp-chevron,#acp-auto .chev{display:inline-flex;align-items:center;justify-content:center;margin-left:3px;line-height:0}.acp-chevron .acp-icon,#acp-auto .chev .acp-icon{width:16px;height:16px}",
+    "#acp-approval .approval-icon{width:14px;height:14px}.acp-approval .mode{font-weight:420}.acp-effort-current .acp-icon{width:14px;height:14px;margin-left:3px;color:var(--acp-ink-muted)}.acp-pop-icon{width:15px;height:15px;color:var(--acp-ink-muted)}",
   ].join("\n");
+  var LUCIDE_PATHS = {
+    sparkles: '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z"></path><path d="M5 3v4"></path><path d="M19 17v4"></path><path d="M3 5h4"></path><path d="M17 19h4"></path>',
+    chevronDown: '<path d="m6 9 6 6 6-6"></path>',
+    chevronRight: '<path d="m9 18 6-6-6-6"></path>',
+    plus: '<path d="M5 12h14"></path><path d="M12 5v14"></path>',
+    panelRight: '<rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M15 3v18"></path>',
+    moreHorizontal: '<circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle>',
+    x: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
+    circleDot: '<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3"></circle>',
+    shieldCheck: '<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3Z"></path><path d="m9 12 2 2 4-4"></path>',
+    triangleAlert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path>',
+    arrowUp: '<path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path>',
+    search: '<circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path>',
+    copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
+    check: '<path d="m5 12 4 4L19 6"></path>',
+    rotateCcw: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path>',
+    sliders: '<path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M1 14h6"></path><path d="M9 8h6"></path><path d="M17 16h6"></path>',
+    circleHelp: '<circle cx="12" cy="12" r="10"></circle><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 2-3 4"></path><path d="M12 17h.01"></path>',
+    messageCircle: '<path d="M7.9 20a9 9 0 1 1 3.7 1.9L7 22Z"></path>',
+    bookOpen: '<path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V5a2 2 0 0 1 2-2h5a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3Z"></path><path d="M21 18a1 1 0 0 0 1-1V5a2 2 0 0 0-2-2h-5a3 3 0 0 0-3 3v15a3 3 0 0 1 3-3Z"></path>',
+  };
+  function svgIcon(name, extraClass) {
+    var className = "acp-icon" + (extraClass ? " " + extraClass : "");
+    return '<svg class="' + className + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (LUCIDE_PATHS[name] || LUCIDE_PATHS.circleDot) + "</svg>";
+  }
   var host = document.createElement("div");
   host.id = "acp-host";
   var root = host.attachShadow({ mode: "open" });
@@ -228,27 +258,27 @@
   document.head.appendChild(pushStyle);
   var fab = document.createElement("button");
   fab.id = "acp-fab";
-  fab.innerHTML = "<span>✦</span>";
+  fab.innerHTML = svgIcon("sparkles");
   fab.title = "Trợ lý LMS (Alt+C)";
   var side = document.createElement("div");
   side.id = "acp-side";
   side.innerHTML =
     '<div id="acp-grip" title="kéo để đổi rộng"></div>' +
     '<div id="acp-head">' +
-    '<button id="acp-head-main" type="button" title="Xem các cuộc trò chuyện cũ" aria-label="Xem các cuộc trò chuyện cũ" aria-haspopup="true"><span id="acp-title">New AI chat</span><span class="acp-chevron">⌄</span></button>' +
-    '<button id="acp-new" class="acp-hbtn" title="Đoạn chat mới" aria-label="Đoạn chat mới">✚</button>' +
-    '<button id="acp-wide" class="acp-hbtn" title="rộng/hẹp (Alt+M)" aria-label="Rộng hoặc hẹp">▭</button>' +
-    '<button id="acp-more" class="acp-hbtn" title="Tùy chọn" aria-label="Tùy chọn">⋯</button>' +
-    '<button id="acp-x" class="acp-hbtn" title="đóng" aria-label="Đóng">»</button></div>' +
+    '<button id="acp-head-main" type="button" title="Xem các cuộc trò chuyện cũ" aria-label="Xem các cuộc trò chuyện cũ" aria-haspopup="true"><span id="acp-title">New AI chat</span><span class="acp-chevron">' + svgIcon("chevronDown") + '</span></button>' +
+    '<button id="acp-new" class="acp-hbtn" title="Đoạn chat mới" aria-label="Đoạn chat mới">' + svgIcon("plus") + '</button>' +
+    '<button id="acp-wide" class="acp-hbtn" title="rộng/hẹp (Alt+M)" aria-label="Rộng hoặc hẹp">' + svgIcon("panelRight") + '</button>' +
+    '<button id="acp-more" class="acp-hbtn" title="Tùy chọn" aria-label="Tùy chọn">' + svgIcon("moreHorizontal") + '</button>' +
+    '<button id="acp-x" class="acp-hbtn" title="đóng" aria-label="Đóng">' + svgIcon("x") + '</button></div>' +
     '<div id="acp-hist"></div>' +
     '<div id="acp-msgs"></div><div id="acp-type"><i></i><i></i><i></i> AI đang soạn…</div>' +
     '<div id="acp-inbar"><div id="acp-pop"></div><div class="acp-composer">' +
-    '<div class="acp-chiprow"><button id="acp-chip" title="Trạng thái học tập" type="button">◎ <span id="acp-chip-t">LMS</span></button></div>' +
+    '<div class="acp-chiprow"><button id="acp-chip" title="Trạng thái học tập" type="button">' + svgIcon("circleDot") + '<span id="acp-chip-t">LMS</span></button></div>' +
     '<textarea id="acp-in" rows="1" placeholder="Hỏi bất cứ điều gì về khóa học…"></textarea>' +
-    '<div id="acp-foot"><div class="acp-fleft"><button id="acp-add" class="acp-toolbtn" title="Thêm" type="button">＋</button>' +
-    '<button id="acp-mode" class="acp-toolbtn" title="Chế độ" type="button">⚙</button><button id="acp-approval" title="Quyền thực thi" type="button"><span>◉</span><span class="mode">Hỏi trước</span><span>⌄</span></button></div>' +
-    '<div class="acp-fright"><button id="acp-auto" title="Độ suy luận của model" type="button">Select effort <span class="chev">⌄</span></button>' +
-    '<button id="acp-send" title="Gửi" aria-label="Gửi" type="button">↑</button></div></div></div></div>';
+    '<div id="acp-foot"><div class="acp-fleft"><button id="acp-add" class="acp-toolbtn" title="Thêm" type="button">' + svgIcon("plus") + '</button>' +
+    '<button id="acp-mode" class="acp-toolbtn" title="Chế độ" type="button">' + svgIcon("sliders") + '</button><button id="acp-approval" title="Quyền thực thi" type="button">' + svgIcon("shieldCheck", "approval-icon") + '<span class="mode">Hỏi trước</span></button></div>' +
+    '<div class="acp-fright"><button id="acp-auto" title="Độ suy luận của model" type="button">Select effort <span class="chev">' + svgIcon("chevronDown") + '</span></button>' +
+    '<button id="acp-send" title="Gửi" aria-label="Gửi" type="button">' + svgIcon("arrowUp") + '</button></div></div></div></div>';
   document.body.appendChild(host);
   function detectLmsTheme() {
     var value = "";
@@ -274,7 +304,7 @@
   root.appendChild(side);
   var canvas = document.createElement("div");
   canvas.id = "acp-canvas";
-  canvas.innerHTML = '<div class="acp-canvas-head"><h2 id="acp-canvas-title">Agentic view</h2><button class="acp-canvas-close" type="button" aria-label="Đóng">×</button></div><div class="acp-canvas-body"></div>';
+  canvas.innerHTML = '<div class="acp-canvas-head"><h2 id="acp-canvas-title">Agentic view</h2><button class="acp-canvas-close" type="button" aria-label="Đóng">' + svgIcon("x") + '</button></div><div class="acp-canvas-body"></div>';
   root.appendChild(canvas);
   var msgs = side.querySelector("#acp-msgs");
   var input = side.querySelector("#acp-in");
@@ -294,7 +324,7 @@
   var histBox = side.querySelector("#acp-hist");
   histBox.onclick = function (e) { e.stopPropagation(); };
   var headMain = side.querySelector("#acp-head-main");
-  sendBtn.textContent = "↑";
+  sendBtn.innerHTML = svgIcon("arrowUp");
   sendBtn.title = "Gửi câu hỏi";
   function setConversation(id) {
     CONVERSATION_ID = id || newConversationId();
@@ -342,7 +372,7 @@
     var del = document.createElement("button");
     del.type = "button";
     del.className = "x";
-    del.textContent = "×";
+    del.innerHTML = svgIcon("x");
     del.title = "Xóa đoạn chat";
     del.onclick = function (e) {
       e.stopPropagation();
@@ -519,30 +549,30 @@
     var bar = document.createElement("div");
     bar.className = "acp-actions";
     var copyBtn = document.createElement("button");
-    copyBtn.type = "button"; copyBtn.title = "Sao chép"; copyBtn.textContent = "⧉";
+    copyBtn.type = "button"; copyBtn.title = "Sao chép"; copyBtn.innerHTML = svgIcon("copy");
     copyBtn.onclick = function () {
       var text = box.querySelector(".body") ? box.querySelector(".body").innerText : "";
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text);
         else { var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
-        copyBtn.textContent = "✓"; setTimeout(function () { copyBtn.textContent = "⧉"; }, 1200);
+        copyBtn.innerHTML = svgIcon("check"); setTimeout(function () { copyBtn.innerHTML = svgIcon("copy"); }, 1200);
       } catch (e) { /* clipboard có thể bị chặn */ }
     };
-    bar.appendChild(copyBtn); bar.appendChild(addBtn2("+"));
+    bar.appendChild(copyBtn); bar.appendChild(addBtn2("plus"));
     box.appendChild(bar);
-    function addBtn2(t) { var b = document.createElement("button"); b.type = "button"; b.textContent = t; b.title = "Chèn"; b.onclick = function () { input.value += box.querySelector(".body").innerText.slice(0, 400); input.focus(); syncSend(); }; return b; }
+    function addBtn2(iconName) { var b = document.createElement("button"); b.type = "button"; b.innerHTML = svgIcon(iconName); b.title = "Chèn"; b.onclick = function () { input.value += box.querySelector(".body").innerText.slice(0, 400); input.focus(); syncSend(); }; return b; }
   }
   function addWelcome() {
     var d = document.createElement("div");
     d.className = "acp-welcome";
     d.innerHTML =
-      '<div class="acp-welcome-icon">✦</div>' +
+      '<div class="acp-welcome-icon">' + svgIcon("sparkles") + '</div>' +
       '<h2>How can I help you today?</h2>' +
       '<div class="acp-suggestions">' +
-      '<button class="acp-suggestion" data-q="Tóm tắt bài học này cho tôi"><span class="acp-suggestion-mark">✦</span><span>Personalize your LMS AI</span></button>' +
-      '<button class="acp-suggestion" data-q="Tạo 3 câu quiz nháp cho bài này"><span class="acp-suggestion-mark">◫</span><span>Create quiz <span class="tag">New</span></span></button>' +
-      '<button class="acp-suggestion" data-q="Giải thích nội dung bài học này"><span class="acp-suggestion-mark">◌</span><span>Explain this lesson</span></button>' +
-      '<button class="acp-suggestion" data-q="Tiến độ học của tôi thế nào?"><span class="acp-suggestion-mark">⌕</span><span>Analyze my progress</span></button>' +
+      '<button class="acp-suggestion" data-q="Tóm tắt bài học này cho tôi"><span class="acp-suggestion-mark">' + svgIcon("sparkles") + '</span><span>Personalize your LMS AI</span></button>' +
+      '<button class="acp-suggestion" data-q="Tạo 3 câu quiz nháp cho bài này"><span class="acp-suggestion-mark">' + svgIcon("bookOpen") + '</span><span>Create quiz <span class="tag">New</span></span></button>' +
+      '<button class="acp-suggestion" data-q="Giải thích nội dung bài học này"><span class="acp-suggestion-mark">' + svgIcon("circleHelp") + '</span><span>Explain this lesson</span></button>' +
+      '<button class="acp-suggestion" data-q="Tiến độ học của tôi thế nào?"><span class="acp-suggestion-mark">' + svgIcon("search") + '</span><span>Analyze my progress</span></button>' +
       '</div>';
     d.querySelectorAll(".acp-suggestion").forEach(function (b) {
       b.onclick = function () { send(b.dataset.q); };
@@ -608,7 +638,7 @@
         undoBtn.disabled = true; undoBtn.textContent = "Đang hoàn tác…";
         fetch(GATEWAY + "/actions/" + encodeURIComponent(card.action_id) + "/undo", { method: "POST", credentials: "same-origin" })
           .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.detail || "undo failed"); return j; }); })
-          .then(function () { undoBtn.textContent = "Đã hoàn tác ✓"; })
+          .then(function () { undoBtn.textContent = "Đã hoàn tác"; })
           .catch(function (e) { undoBtn.disabled = false; undoBtn.textContent = e.message || "Hoàn tác lỗi"; });
       };
       box.appendChild(undoBtn);
@@ -733,7 +763,7 @@
           actionError.retryable = false;
           throw actionError;
         }
-        btn.textContent = "Đã duyệt ✓";
+        btn.textContent = "Đã duyệt";
         if (j.result && j.result.kind === "action") addAssistant("", [], [], null, [j.result], j.result.directives || []);
         else addAssistant("Đã thực hiện sau phê duyệt: " + JSON.stringify(j.result).slice(0, 800), [], []);
       })
@@ -859,7 +889,7 @@
       var raw = ev.tool || "tool";
       var label = toolVi(raw);
       if (ev.ms != null) label += " · " + ev.ms + "ms";
-      row.innerHTML = '<span class="tick">✓</span><span>Đã dùng</span> <span class="tname">' + esc(label) + "</span>";
+      row.innerHTML = svgIcon("check", "tick") + '<span>Đã dùng</span> <span class="tname">' + esc(label) + "</span>";
       var body = el.querySelector(".th-body");
       if (ev.result) row.title = raw + ": " + String(ev.result).slice(0, 400);
       body.appendChild(row);
@@ -958,16 +988,16 @@
     items.forEach(function (it) {
       var b = document.createElement("button");
       b.type = "button";
-      b.innerHTML = "<span>" + it[0] + "</span><span>" + it[1] + "</span>";
+      b.innerHTML = svgIcon(it[0], "acp-pop-icon") + "<span>" + it[1] + "</span>";
       b.onclick = function () { closePop(); it[2](); };
       pop.appendChild(b);
     });
     pop.classList.add("show");
   }
   var APPROVAL_MODES = [
-    { value: "ask", icon: "♧", label: "Hỏi trước khi làm", short: "Hỏi trước", description: "Luôn yêu cầu bạn duyệt trước mọi thao tác thay đổi." },
-    { value: "auto", icon: "◉", label: "Tự duyệt cho tôi", short: "Tự duyệt", description: "Tự chạy thay đổi thường; vẫn hỏi khi xóa, gửi thông báo, tạo lớp hoặc xuất bản khóa học." },
-    { value: "full_access", icon: "⚠", label: "Toàn quyền", short: "Toàn quyền", description: "Không hỏi lại. AI được dùng mọi tool trong quyền LMS của tài khoản.", danger: true }
+    { value: "ask", icon: "shieldCheck", label: "Hỏi trước khi làm", short: "Hỏi trước", description: "Luôn yêu cầu bạn duyệt trước mọi thao tác thay đổi." },
+    { value: "auto", icon: "circleDot", label: "Tự duyệt cho tôi", short: "Tự duyệt", description: "Tự chạy thay đổi thường; vẫn hỏi khi xóa, gửi thông báo, tạo lớp hoặc xuất bản khóa học." },
+    { value: "full_access", icon: "triangleAlert", label: "Toàn quyền", short: "Toàn quyền", description: "Không hỏi lại. AI được dùng mọi tool trong quyền LMS của tài khoản.", danger: true }
   ];
   function approvalStorageKey() {
     return "acp-approval-mode:" + String(CURRENT_IDENTITY.user || "Guest");
@@ -1000,7 +1030,7 @@
       var button = document.createElement("button");
       button.type = "button";
       button.className = "acp-approval-option" + (item.danger ? " danger" : "");
-      button.innerHTML = '<span class="icon">' + item.icon + '</span><span><span class="label">' + item.label + '</span><span class="desc">' + item.description + '</span></span><span class="check">' + (item.value === CURRENT_APPROVAL_MODE ? "✓" : "") + '</span>';
+      button.innerHTML = svgIcon(item.icon, "icon") + '<span><span class="label">' + item.label + '</span><span class="desc">' + item.description + '</span></span><span class="check">' + (item.value === CURRENT_APPROVAL_MODE ? svgIcon("check") : "") + '</span>';
       button.onclick = function () { setApprovalMode(item.value); closePop(); };
       pop.appendChild(button);
     });
@@ -1015,9 +1045,9 @@
     e.stopPropagation();
     if (pop.classList.contains("show")) { closePop(); return; }
     openPop([
-      ["◎", "Dùng ngữ cảnh LMS hiện tại", function () { chip.classList.remove("off"); syncUiChrome(); }],
-      ["✦", "Tóm tắt bài học này", function () { send("Tóm tắt bài học này cho tôi"); }],
-      ["◌", "Kiểm tra tiến độ học tập", function () { send("Tiến độ học của tôi thế nào?"); }]
+      ["circleDot", "Dùng ngữ cảnh LMS hiện tại", function () { chip.classList.remove("off"); syncUiChrome(); }],
+      ["sparkles", "Tóm tắt bài học này", function () { send("Tóm tắt bài học này cho tôi"); }],
+      ["search", "Kiểm tra tiến độ học tập", function () { send("Tiến độ học của tôi thế nào?"); }]
     ]);
   };
   var EFFORT_LEVELS = [
@@ -1036,7 +1066,7 @@
     var range = pop.querySelector("#acp-effort-range");
     if (!current || !range) return;
     current.textContent = CURRENT_EFFORT === "auto" ? "Auto" : EFFORT_LEVELS[effortIndex()].label;
-    var arrow = document.createElement("span"); arrow.textContent = "›"; current.appendChild(arrow);
+    var arrow = document.createElement("span"); arrow.innerHTML = svgIcon("chevronRight"); current.appendChild(arrow);
     var index = effortIndex();
     range.value = String(index);
     range.style.setProperty("--effort-fill", (index / (EFFORT_LEVELS.length - 1) * 100) + "%");
@@ -1051,17 +1081,17 @@
     e.stopPropagation();
     if (pop.classList.contains("show")) { closePop(); return; }
     openPop([
-      ["⚙", "Auto: trả lời toàn diện", function () { CURRENT_MODE = "chat"; }],
-      ["F", "Feynman: tôi giảng lại", function () { CURRENT_MODE = "feynman"; send("Hãy bắt đầu phiên Feynman cho bài này."); }],
-      ["?", "Kiểm tra hội thoại", function () { CURRENT_MODE = "check"; send("Hãy bắt đầu kiểm tra hội thoại cho bài này."); }],
-      ["V", "Viva: hỏi đáp trực tiếp", function () { CURRENT_MODE = "viva"; send("Hãy bắt đầu phiên viva cho bài này."); }],
-      ["✓", "Chấm phiên học hiện tại", function () {
+      ["sliders", "Auto: trả lời toàn diện", function () { CURRENT_MODE = "chat"; }],
+      ["bookOpen", "Feynman: tôi giảng lại", function () { CURRENT_MODE = "feynman"; send("Hãy bắt đầu phiên Feynman cho bài này."); }],
+      ["circleHelp", "Kiểm tra hội thoại", function () { CURRENT_MODE = "check"; send("Hãy bắt đầu kiểm tra hội thoại cho bài này."); }],
+      ["messageCircle", "Viva: hỏi đáp trực tiếp", function () { CURRENT_MODE = "viva"; send("Hãy bắt đầu phiên viva cho bài này."); }],
+      ["check", "Chấm phiên học hiện tại", function () {
         if (!CURRENT_CONCEPT || CURRENT_MODE === "chat") { addAssistant("Hãy mở bài có concept đã duyệt và chọn Feynman, Viva hoặc Kiểm tra trước.", [], []); return; }
         fetch(GATEWAY + "/learning/session", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: CURRENT_MODE, concept_id: CURRENT_CONCEPT, transcript: msgs.innerText.slice(0, 12000) }) })
           .then(function (r) { return r.json(); }).then(function (d) { addAssistant("Điểm phiên: " + Math.round(100 * d.score) + "%\n" + ((d.rubric || {}).feedback || "Đã lưu evidence ngoài LMS."), [], []); });
       }],
-      ["✦", "Tóm tắt ngắn gọn", function () { CURRENT_MODE = "chat"; send("Tóm tắt ngắn gọn bài học này"); }],
-      ["⌕", "Giải thích chi tiết", function () { CURRENT_MODE = "chat"; send("Giải thích chi tiết nội dung bài học này"); }]
+      ["sparkles", "Tóm tắt ngắn gọn", function () { CURRENT_MODE = "chat"; send("Tóm tắt ngắn gọn bài học này"); }],
+      ["search", "Giải thích chi tiết", function () { CURRENT_MODE = "chat"; send("Giải thích chi tiết nội dung bài học này"); }]
     ]);
   };
   function openEffortPop() {
@@ -1070,10 +1100,10 @@
     pop.innerHTML =
       '<div class="acp-effort-card">' +
       '<div class="acp-effort-head">' +
-      '<span class="acp-effort-bolt">ϟ</span>' +
-      '<div><div id="acp-effort-current" class="acp-effort-current">Auto <span>›</span></div>' +
+      '<span class="acp-effort-bolt">' + svgIcon("sparkles") + '</span>' +
+      '<div><div id="acp-effort-current" class="acp-effort-current">Auto <span>' + svgIcon("chevronRight") + '</span></div>' +
       '<div id="acp-effort-model" class="acp-effort-model">GPT-5.6 Luna</div></div>' +
-      '<button id="acp-effort-reset" class="acp-effort-reset" type="button" title="Đặt lại Auto">↻</button>' +
+      '<button id="acp-effort-reset" class="acp-effort-reset" type="button" title="Đặt lại Auto">' + svgIcon("rotateCcw") + '</button>' +
       '</div>' +
       '<div class="acp-effort-dots"><i></i><i></i><i></i><i></i><i></i></div></div>' +
       '</div>';

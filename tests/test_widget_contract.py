@@ -23,6 +23,13 @@ def test_widget_does_not_claim_identity():
     assert "MutationObserver(syncLmsTheme)" in source
     assert "width:296px" in source
     assert ".acp-composer{background:var(--acp-surface)" in source
+    assert "InterVar,ui-sans-serif,system-ui,sans-serif" in source
+    assert "var LUCIDE_PATHS" in source
+    assert 'svgIcon("chevronDown")' in source
+    assert 'svgIcon("chevronRight")' in source
+    assert 'svgIcon("shieldCheck", "approval-icon")' in source
+    assert 'svgIcon(item.icon, "icon")' in source
+    assert "⌄" not in source
     assert 'id="acp-queue"' not in source
     assert "refreshQueue" not in source
     assert "acp-fab-badge" not in source
