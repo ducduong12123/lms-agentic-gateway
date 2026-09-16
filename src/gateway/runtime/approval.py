@@ -121,3 +121,18 @@ def audit(role: str, tool: str, args: dict, result, actor: str = "") -> None:
                 actor,
             ),
         )
+def pending_for(role: str, member: str) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id,tool,args,status,created,requested_by,required_roles "
+            "FROM approvals WHERE status='pending' AND (requested_by=? OR required_roles LIKE ?)"
+            " ORDER BY created DESC LIMIT 50",
+            (member, f'%\"{role}\"%'),
+        ).fetchall()
+    out = []
+    for row in rows:
+        item = dict(row)
+        item["args"] = json.loads(item.pop("args") or "{}")
+        item["required_roles"] = json.loads(item["required_roles"] or "[]")
+        out.append(item)
+    return out

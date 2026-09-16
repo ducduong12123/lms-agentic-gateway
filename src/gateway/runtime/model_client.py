@@ -1,8 +1,31 @@
 """OpenAI-compatible client. Chi dung stdlib (urllib). Ho tro chat thuong + SSE stream."""
 from __future__ import annotations
-
 import json
+import urllib.error
 import urllib.request
+
+
+class ModelClientError(RuntimeError):
+    def __init__(self, status_code: int | None, detail: str):
+        self.status_code = status_code
+        self.detail = str(detail or "").strip() or "unknown model error"
+        prefix = f"LLM HTTP {status_code}" if status_code is not None else "LLM connection error"
+        super().__init__(f"{prefix}: {self.detail}")
+
+
+def _error_detail(raw: str) -> str:
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw.strip()
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, dict):
+        return str(error.get("message") or error.get("detail") or error)
+    if isinstance(error, str):
+        return error
+    if isinstance(payload, dict):
+        return str(payload.get("detail") or payload.get("message") or raw).strip()
+    return raw.strip()
 
 
 class OpenAICompatClient:
@@ -25,24 +48,37 @@ class OpenAICompatClient:
             method="POST",
         )
 
-    def chat(self, messages: list, tools: list | None = None) -> dict:
+    def _open(self, payload: dict):
+        try:
+            return urllib.request.urlopen(self._req(payload), timeout=self.timeout)
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", "replace")
+            raise ModelClientError(exc.code, _error_detail(raw) or exc.reason) from exc
+        except urllib.error.URLError as exc:
+            raise ModelClientError(None, str(exc.reason or exc)) from exc
+
+
+    def chat(self, messages: list, tools: list | None = None, effort: str = "auto") -> dict:
         payload: dict = {"model": self.model, "messages": messages}
+        if effort and effort != "auto":
+            payload["reasoning_effort"] = effort
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
-        with urllib.request.urlopen(self._req(payload), timeout=self.timeout) as res:
+        with self._open(payload) as res:
             return json.loads(res.read().decode())
 
-    def chat_stream(self, messages: list, tools: list | None = None):
+    def chat_stream(self, messages: list, tools: list | None = None, effort: str = "auto"):
         """Yield event dict. Cuoi cung luon yield {"type": "message", ...}.
 
         Event giua chung:
-          {"type": "token", "text": str}    -- content delta (tra loi).
-          {"type": "thought", "text": str}  -- reasoning delta (CoT), neu model tra ve.
+          {"type": "token", "text": str}    -- content delta (tra ve)
+          {"type": "thought", "text": str}  -- reasoning delta (neu model tra ve)
           {"type": "round", ...}            -- khong co o day; agent_loop tu phat.
-        Tool-call delta duoc gop am (SSE tra ve tung manh arguments), khong yield rieng.
         """
         payload: dict = {"model": self.model, "messages": messages, "stream": True}
+        if effort and effort != "auto":
+            payload["reasoning_effort"] = effort
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
@@ -50,7 +86,7 @@ class OpenAICompatClient:
         thought_parts: list[str] = []
         tool_acc: dict[int, dict] = {}  # index -> {id, name, args}
         finish_reason: str | None = None
-        with urllib.request.urlopen(self._req(payload), timeout=self.timeout) as res:
+        with self._open(payload) as res:
             for raw in res:
                 try:
                     line = raw.decode("utf-8", "replace").strip()

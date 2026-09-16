@@ -12,3 +12,9 @@ def test_widget_does_not_claim_identity():
     assert "attachShadow" in source
     assert 'GATEWAY + "/me/mastery' in source
     assert 'page: location.pathname + location.search' in source
+    assert "approval_mode: CURRENT_APPROVAL_MODE" in source
+    assert '"ask"' in source
+    assert '"auto"' in source
+    assert '"full_access"' in source
+    assert "Hỏi trước khi làm" in source
+    assert "Toàn quyền" in source

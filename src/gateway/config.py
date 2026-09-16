@@ -45,7 +45,7 @@ class Settings:
         origin.strip().rstrip("/")
         for origin in _get(
             "PUBLIC_ORIGINS",
-            "http://localhost:8080,http://lms.localhost:8080",
+            "http://localhost:8080,http://lms.localhost:8080,http://localhost:8000,http://lms.localhost:8000,http://127.0.0.1:8080,http://127.0.0.1:8000",
         ).split(",")
         if origin.strip()
     )

@@ -9,6 +9,7 @@ Vào Website Settings > HTML Block / Custom Script, dán:
 ```
 
 Đổi `data-role` theo trang: `student` / `teacher` / `evaluator` / `admin`.
+Khi Frappe chạy trực tiếp ở `:8000`, thêm origin của trang vào `PUBLIC_ORIGINS` của gateway; cấu hình Docker mặc định đã có `localhost:8000` và `lms.localhost:8000`.
 Widget tự lấy `window.frappe.session.user` làm member, gateway ép vào tool.
 
 ## Cách 2: Desk (dev only)

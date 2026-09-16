@@ -9,7 +9,7 @@ services:
       GATEWAY_HOST: 0.0.0.0
       FRAPPE_URL: http://frappe:8000
       FRAPPE_SITE_HOST: lms.localhost
-      PUBLIC_ORIGINS: http://localhost:8080,http://lms.localhost:8080
+      PUBLIC_ORIGINS: http://localhost:8080,http://lms.localhost:8080,http://localhost:8000,http://lms.localhost:8000,http://127.0.0.1:8080,http://127.0.0.1:8000
       LLM_BASE_URL: ${DOCKER_LLM_BASE_URL:-http://host.docker.internal:20128/v1}
     extra_hosts:
       - host.docker.internal:host-gateway

@@ -8,6 +8,10 @@ from ..runtime.long_memory import add_memory as _add_memory
 from ..runtime.long_memory import forget_memory as _forget_memory
 from ..runtime.long_memory import search_memories as _search_memories
 from ..runtime.tool_registry import Tool, ToolRegistry
+from .verbs_student import register as register_student_verbs
+from .verbs_client import register as register_client_verbs
+from .verbs_teacher import register as register_teacher_verbs
+from .verbs_course_authoring import register as register_course_authoring_verbs
 
 STUDENT_SAFE_LESSON_FIELDS = ["name", "title", "body", "content", "quiz_id", "course", "chapter", "include_in_preview"]
 
@@ -17,7 +21,7 @@ def _mock(frappe: FrappeClient) -> bool:
     return not frappe.is_configured
 
 
-def build_registry(frappe: FrappeClient) -> ToolRegistry:
+def build_registry(frappe: FrappeClient, llm=None) -> ToolRegistry:
     reg = ToolRegistry()
 
     # ---------- 1. search_courses ----------
@@ -34,19 +38,19 @@ def build_registry(frappe: FrappeClient) -> ToolRegistry:
     def get_course_outline(a: dict):
         course = a["course"]
         if _mock(frappe):
-            return {"course": course, "chapters": [{"title": "Ch1", "lessons": ["Bài 1", "Bài 2"]}], "source": f"LMS Course: {course}"}
+            return {"course": course, "chapters": [{"id": "CH-1", "title": "Ch1", "lessons": ["Bài 1", "Bài 2"]}], "source": f"LMS Course: {course}"}
         doc = frappe.get_document("LMS Course", course).get("data", {})
-        out = {"course": doc.get("title"), "chapters": []}
+        out = {"course": doc.get("title"), "course_id": doc.get("name"), "chapters": []}
         for ch_ref in doc.get("chapters", []):
-            ch = frappe.get_document("Course Chapter", ch_ref.get("chapter")).get("data", {})
+            chapter_id = ch_ref.get("chapter")
+            ch = frappe.get_document("Course Chapter", chapter_id).get("data", {})
             lessons = []
             for lr in ch.get("lessons", []):
                 lessons.append(lr.get("lesson"))
-            out["chapters"].append({"title": ch.get("title"), "lessons": lessons})
+            out["chapters"].append({"id": ch.get("name") or chapter_id, "title": ch.get("title"), "lessons": lessons})
         out["source"] = f"LMS Course: {doc.get('title')}"
         return out
-
-    reg.register(Tool("get_course_outline", "Lấy outline Course -> Chapter -> Lesson. Chỉ đọc.", {"type": "object", "properties": {"course": {"type": "string"}}, "required": ["course"]}, get_course_outline))
+    reg.register(Tool("get_course_outline", "Lấy outline Course -> Chapter -> Lesson. Trả về course_id và chapters[].id (Course Chapter name) + lessons[] (Course Lesson name). Dùng chapter id khi tạo bài mới bằng publish_lesson_draft. Chỉ đọc.", {"type": "object", "properties": {"course": {"type": "string", "description": "LMS Course name/id, ví dụ 'kh-a-h-c-m-i'"}}, "required": ["course"]}, get_course_outline))
 
     # ---------- 3. get_lesson_context (student-safe) ----------
     def get_lesson_context(a: dict):
@@ -89,7 +93,41 @@ def build_registry(frappe: FrappeClient) -> ToolRegistry:
         th = int(a.get("threshold", 30))
         return {"at_risk": [r for r in rows if (r.get("progress") or 0) < th]}
 
-    reg.register(Tool("find_at_risk_students", "Tìm học viên progress thấp (teacher/admin).", {"type": "object", "properties": {"course": {"type": "string"}, "threshold": {"type": "integer", "default": 30}}, "required": ["course"]}, find_at_risk_students))
+
+    # ---------- 6b. list_at_risk_students (ITS engine, teacher/admin) ----------
+    def list_at_risk_students(a: dict):
+        role = str(a.get("_role") or "")
+        if role not in ("teacher", "admin"):
+            return {"error": "tool 'list_at_risk_students' chi danh cho teacher/admin"}
+        course = str(a.get("course") or "")
+        try:
+            limit = int(a.get("limit", 10) or 10)
+        except (TypeError, ValueError):
+            limit = 10
+        return {
+            "course": course,
+            "students": _features.risk_overview(course, limit),
+            "source": "engine ITS evidence/mastery",
+        }
+
+    reg.register(Tool("list_at_risk_students", "Liệt kê học viên nguy cơ kèm concept yếu và vì sao (nguồn ITS engine). course để trống vẫn được; yếu nhất xếp trước. Dùng cho câu hỏi 'học viên yếu nhất là ai, vì sao' (teacher/admin).", {"type": "object", "properties": {"course": {"type": "string", "default": ""}, "limit": {"type": "integer", "default": 10}}, "required": []}, list_at_risk_students))
+
+    # ---------- 6c. get_student_mastery (ITS engine, teacher/admin) ----------
+    def get_student_mastery(a: dict):
+        role = str(a.get("_role") or "")
+        if role not in ("teacher", "admin"):
+            return {"error": "tool 'get_student_mastery' chi danh cho teacher/admin"}
+        student = str(a.get("student") or a.get("target") or "").strip()
+        if not student or student == "Guest":
+            return {"error": "thieu student."}
+        course = str(a.get("course") or "")
+        return {
+            "student": student,
+            "weak_concepts": _learner.weak_concepts(student, course, limit=5),
+            "source": "engine ITS mastery",
+        }
+
+    reg.register(Tool("get_student_mastery", "Xem concept yếu kèm evidence của MỘT học viên cụ thể (teacher/admin). Tham số student là email/username học viên, không dùng member. Gọi sau list_at_risk_students để lấy vì sao chi tiết.", {"type": "object", "properties": {"student": {"type": "string", "description": "email/username học viên"}, "course": {"type": "string", "default": ""}}, "required": ["student"]}, get_student_mastery))
 
     # ---------- 7. submissions (evaluator) ----------
     def get_quiz_submissions(a: dict):
@@ -226,5 +264,8 @@ def build_registry(frappe: FrappeClient) -> ToolRegistry:
         }, "required": ["concept_id"]},
         record_feedback_correction,
     ))
-
+    register_teacher_verbs(reg, frappe)
+    register_course_authoring_verbs(reg, frappe)
+    register_client_verbs(reg)
+    register_student_verbs(reg, frappe, llm)
     return reg

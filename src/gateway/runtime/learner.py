@@ -303,7 +303,7 @@ def recompute_mastery(
     states: dict[tuple[str, str], list] = {}
     for row in rows:
         key = (row["member"], row["concept_id"])
-        current, count = states.get(key, [INITIAL_P, 0])
+        current, count, _ = states.get(key, [INITIAL_P, 0, 0.0])
         current = max(0.0, min(1.0, current + ETA * float(row["weight"]) * (float(row["outcome"]) - current)))
         states[key] = [current, count + 1, float(row["observed_at"])]
     conn = _conn(path)

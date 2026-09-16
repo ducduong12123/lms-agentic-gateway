@@ -14,6 +14,7 @@ Widget là 1 file: `http://127.0.0.1:8001/widget/agentic-copilot.js`.
 
 3. Đổi `data-role` theo đối tượng: `student | teacher | evaluator | admin`.
 4. Reload trang, bấm nút ✦ góc phải, hoặc `Alt+C`. Sidebar IDE dock phải hiện ra.
+5. Nếu mở Frappe trực tiếp ở `:8000` thay vì qua proxy `:8080`, origin đó phải có trong `PUBLIC_ORIGINS`; cấu hình Docker mặc định đã bao gồm `localhost:8000` và `lms.localhost:8000`.
 
 Vì sao không sợ CSP: script serve từ gateway có header `Access-Control-Allow-Origin: *`,
 widget chỉ `fetch POST /chat`, không đọc cookie Frappe, member lấy từ

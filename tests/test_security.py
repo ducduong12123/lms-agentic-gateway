@@ -3,14 +3,18 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import urllib.request
+from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from gateway.api.webhook import verify_signature
 from gateway.runtime import approval
 from gateway.runtime.agent_loop import _run_tool
 from gateway.runtime.identity import IdentityResolver, map_role
 from gateway.runtime.tool_registry import Tool, ToolRegistry
+from gateway.api import server
 
 
 def test_model_cannot_override_private_args_or_member(tmp_path, monkeypatch):
@@ -95,3 +99,52 @@ def test_identity_is_resolved_from_frappe_session():
     identity = IdentityResolver(_FakeFrappe()).resolve("trusted-session")
     assert identity.user == "teacher@example.com"
     assert identity.role == "teacher"
+
+
+def test_session_write_reads_and_sends_frappe_csrf_token(monkeypatch):
+    requests = []
+
+    class Response:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self.body
+
+    def fake_urlopen(request, timeout):
+        requests.append(request)
+        if request.full_url.endswith("/lms"):
+            return Response(b'window["csrf_token"] = "csrf-token";')
+        return Response(b'{"data":{"name":"lesson-1"}}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    from gateway.connector.frappe_client import FrappeClient
+
+    result = FrappeClient(
+        "http://lms.localhost",
+        session_id="trusted-session",
+        site_host="lms.localhost",
+    ).update_document("Course Lesson", "lesson-1", {"body": "ok"})
+
+    assert result["data"]["name"] == "lesson-1"
+    assert requests[0].full_url == "http://lms.localhost/lms"
+    assert requests[1].get_header("X-frappe-csrf-token") == "csrf-token"
+    assert requests[1].get_header("Cookie") == "sid=trusted-session"
+
+
+def test_same_origin_accepts_direct_lms_origin_and_referer_fallback(monkeypatch):
+    monkeypatch.setattr(server.settings, "public_origins", ("http://localhost:8000",))
+
+    server._require_same_origin(SimpleNamespace(headers={"origin": "http://localhost:8000"}))
+    server._require_same_origin(SimpleNamespace(headers={"referer": "http://localhost:8000/lms"}))
+
+    with pytest.raises(HTTPException) as exc_info:
+        server._require_same_origin(SimpleNamespace(headers={"origin": "http://evil.test"}))
+    assert exc_info.value.status_code == 403
+    assert "origin not allowed" in exc_info.value.detail
