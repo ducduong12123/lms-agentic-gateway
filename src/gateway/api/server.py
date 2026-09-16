@@ -21,7 +21,7 @@ from gateway.connector.frappe_client import FrappeClient
 from gateway.runtime import plan_apply, write_plans
 from gateway.runtime.agent_loop import learner_context_for_prompt, run_agent, run_agent_stream
 from gateway.runtime import actions, runs
-from gateway.runtime.approval import mark_executed, pending_for
+from gateway.runtime.approval import mark_executed, peek_approval, pending_for
 from gateway.runtime.approval import approve as claim_approval
 from gateway.runtime.events import EventProcessor
 from gateway.runtime import features, learner
@@ -568,22 +568,11 @@ def teacher_page(identity: Identity = Depends(trusted_identity)) -> FileResponse
 @app.post("/approve/{approval_id}")
 def approve_action(
     approval_id: str,
-    request: Request,
-    identity: Identity = Depends(trusted_identity),
     decision: ApprovalDecision | None = None,
+    request: Request = None,
+    identity: Identity = Depends(trusted_identity),
 ) -> dict:
-    body_decision = decision
-    if body_decision is None:
-        try:
-            payload = request.scope.get("fastapi_body") or {}
-        except Exception:
-            payload = {}
-        if isinstance(payload, dict) and (payload.get("items") is not None or payload.get("typed_confirm")):
-            try:
-                body_decision = ApprovalDecision.model_validate(payload)
-            except Exception:
-                body_decision = None
-    return _execute_approval(approval_id, body_decision, request, identity)
+    return _execute_approval(approval_id, decision, request, identity)
 
 
 @app.patch("/approvals/{approval_id}")
@@ -595,7 +584,7 @@ def update_approval_items(
 ) -> dict:
     _require_same_origin(request)
     try:
-        record = claim_approval(approval_id, identity.user, identity.role)
+        record = peek_approval(approval_id, identity.user, identity.role)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if not record or not record.get("plan_id"):
@@ -641,8 +630,15 @@ def _execute_approval(approval_id: str, decision: ApprovalDecision | None, reque
     args["member"] = identity.user
     args["_role"] = identity.role
     try:
-        if plan and plan.get("status") == "pending" and str(plan.get("tool") or "") == record["tool"]:
-            result = _apply_write_plan(frappe, record["tool"], plan, payload_items, typed_confirm, identity)
+        if plan and str(plan.get("tool") or "") == record["tool"]:
+            if plan.get("status") != "pending":
+                write_plans.mark_plan_status(str(plan.get("id") or ""), "failed")
+                result = {"error": "kế hoạch đã hết hiệu lực; hãy tạo bản xem trước mới thay vì ghi bằng args thô"}
+            else:
+                result = _apply_write_plan(frappe, record["tool"], plan, payload_items, typed_confirm, identity)
+        elif record.get("plan_id"):
+            write_plans.mark_plan_status(str(record.get("plan_id") or ""), "failed")
+            result = {"error": "thiếu bản xem trước hợp lệ; hãy tạo bản xem trước mới thay vì ghi bằng args thô"}
         else:
             result = tool.func(args)
     except ValueError as exc:
@@ -682,12 +678,25 @@ def _execute_approval(approval_id: str, decision: ApprovalDecision | None, reque
     }
 
 
+def authoring_assign_fields(tool_name: str) -> set[str]:
+    if tool_name == "manage_assignment":
+        return {"title", "question", "type", "course", "grade_assignment", "show_answer", "answer"}
+    return {"title", "problem_statement", "language", "test_cases"}
+
+
 def _apply_write_plan(frappe, tool_name: str, plan: dict, payload_items, typed_confirm: str, identity: Identity) -> dict:
     operation = str((plan.get("args") or {}).get("operation") or "")
     reversibility = str(plan.get("reversibility") or "irreversible")
     if write_plans.requires_typed_confirm(tool_name, operation, reversibility):
-        expected = str((plan.get("args") or {}).get("course") or (plan.get("args") or {}).get("chapter") or (plan.get("args") or {}).get("lesson") or (plan.get("args") or {}).get("quiz") or (plan.get("args") or {}).get("name") or "")
-        if expected and typed_confirm.strip() != expected:
+        expected = str(
+            (plan.get("args") or {}).get("course") or (plan.get("args") or {}).get("chapter")
+            or (plan.get("args") or {}).get("lesson") or (plan.get("args") or {}).get("quiz")
+            or (plan.get("args") or {}).get("name") or (plan.get("args") or {}).get("subject")
+            or f"{len(plan.get('items') or [])} người nhận" if tool_name == "message_students" else ""
+        )
+        if not expected and tool_name == "message_students":
+            expected = f"{len(plan.get('items') or [])} người nhận"
+        if typed_confirm.strip() != expected:
             write_plans.mark_plan_status(str(plan.get("id") or ""), "failed")
             return {"error": f"xác nhận '{expected}' chưa đúng; thao tác nguy hiểm đã bị chặn"}
     selected, merged = plan_apply.apply_plan_selection(plan, payload_items)
@@ -699,24 +708,40 @@ def _apply_write_plan(frappe, tool_name: str, plan: dict, payload_items, typed_c
     if not selected:
         write_plans.mark_plan_status(str(plan.get("id") or ""), "rejected")
         return {"kind": "action", "action": tool_name, "status": "noop", "title": "Đã bỏ toàn bộ kế hoạch", "summary": "Không có mục nào được duyệt nên không ghi gì vào LMS.", "changes": [], "undo": {"available": False, "expires_at": None}, "view": None}
-    if tool_name == "manage_course" and operation == "update":
+    if tool_name == "manage_course" and operation == "create":
+        result = plan_executors.apply_manage_course_create(frappe, plan, merged)
+    elif tool_name == "manage_course" and operation == "update":
         result = plan_executors.apply_manage_course_update(frappe, plan, merged)
+    elif tool_name == "manage_chapter" and operation == "create":
+        result = plan_executors.apply_manage_chapter_create(frappe, plan, merged)
     elif tool_name == "manage_chapter" and operation == "update":
         result = plan_executors.apply_manage_chapter_update(frappe, plan, merged)
     elif tool_name == "manage_chapter" and operation == "reorder":
         result = plan_executors.apply_manage_chapter_reorder(frappe, plan, merged)
+    elif tool_name == "manage_lesson" and operation == "create":
+        result = plan_executors.apply_manage_lesson_create(frappe, plan, merged)
     elif tool_name == "manage_lesson" and operation == "update":
         result = plan_executors.apply_manage_lesson_update(frappe, plan, merged)
     elif tool_name == "manage_lesson" and operation == "reorder":
         result = plan_executors.apply_manage_lesson_reorder(frappe, plan, merged)
     elif tool_name == "manage_lesson_block":
         result = plan_executors.apply_manage_lesson_block(frappe, plan, merged)
+    elif tool_name == "manage_quiz" and operation == "create":
+        result = plan_executors.apply_manage_quiz_create(frappe, plan, merged)
     elif tool_name == "manage_quiz" and operation == "update":
         result = plan_executors.apply_manage_quiz_update(frappe, plan, merged)
+    elif tool_name in {"manage_assignment", "manage_programming_exercise"} and operation == "create":
+        allowed = authoring_assign_fields(tool_name)
+        doctype = "LMS Assignment" if tool_name == "manage_assignment" else "LMS Programming Exercise"
+        required = ("title", "question", "type") if tool_name == "manage_assignment" else ("title", "problem_statement", "language")
+        result = plan_executors.apply_simple_create(frappe, action=tool_name, doctype=doctype, allowed=allowed, required=required, plan=plan, merged=merged)
     elif tool_name in {"manage_assignment", "manage_programming_exercise"} and operation == "update":
-        allowed = {"title", "question", "type", "course", "grade_assignment", "show_answer", "answer"} if tool_name == "manage_assignment" else {"title", "problem_statement", "language", "test_cases"}
+        allowed = authoring_assign_fields(tool_name)
         doctype = "LMS Assignment" if tool_name == "manage_assignment" else "LMS Programming Exercise"
         result = plan_executors.apply_simple_update(frappe, action=tool_name, doctype=doctype, allowed=allowed, plan=plan, merged=merged)
+    elif operation == "delete":
+        write_plans.mark_plan_status(str(plan.get("id") or ""), "failed")
+        return {"error": "xóa là thao tác không lùi được và chưa được hỗ trợ apply tự động; hãy xóa trực tiếp trong Frappe"}
     else:
         write_plans.mark_plan_status(str(plan.get("id") or ""), "failed")
         return {"error": f"kế hoạch {tool_name}/{operation} chưa hỗ trợ apply từng mục an toàn"}

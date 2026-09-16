@@ -152,3 +152,76 @@ def test_quiz_update_undo_removes_created_questions():
     assert len(frappe.docs["LMS Question"]) == 1
     assert result["undo"]["op"] == "restore_many"
     assert before["passing_percentage"] == 50
+def test_patch_then_approve_keeps_single_use_approval_alive(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from gateway.api import server
+    from gateway.runtime import approval
+
+    class Identity:
+        user = "teacher@example.com"
+        role = "teacher"
+        roles = ["teacher"]
+        sid = "sid"
+
+    class Frappe:
+        def __init__(self):
+            self.docs = {"LMS Course": [{"name": "PY-101", "title": "Old", "modified": "v1"}]}
+
+        def with_session(self, sid):
+            return self
+
+        def get_document(self, doctype, name):
+            return {"data": dict(next(item for item in self.docs[doctype] if item["name"] == name))}
+
+        def update_document(self, doctype, name, fields):
+            next(item for item in self.docs[doctype] if item["name"] == name).update(fields)
+            return {"data": {"name": name}}
+
+    monkeypatch.setattr(approval, "DB", tmp_path / "approval.db")
+    monkeypatch.setattr(write_plans, "DB", tmp_path / "plans.db")
+    server.app.dependency_overrides[server.trusted_identity] = lambda: Identity()
+    monkeypatch.setattr(server, "_base_frappe", lambda: Frappe())
+    monkeypatch.setattr(server, "_deps", lambda identity: (None, server.build_registry(Frappe())))
+    monkeypatch.setattr(server, "_require_same_origin", lambda request: None)
+    try:
+        client = TestClient(server.app, raise_server_exceptions=False)
+        plan = write_plans.create_plan(
+            "manage_course", "teacher@example.com", {"operation": "update", "course": "PY-101"},
+            [{"id": "title", "label": "Title", "kind": "field", "preview": {"before": "Old", "after": "New"}, "payload": {"fields": {"title": "New"}}}],
+            [{"doctype": "LMS Course", "name": "PY-101", "op": "update", "field": "title"}],
+            "reversible", {"LMS Course:PY-101": "v1"},
+        )
+        approval_id = approval.request_approval(
+            "manage_course", {"operation": "update", "course": "PY-101"},
+            "teacher@example.com", "teacher", {"teacher"}, plan_id=str(plan["id"]),
+        )
+        patched = client.patch(
+            f"/approvals/{approval_id}",
+            json={"items": [{"id": "title", "payload": {"fields": {"title": "Edited"}}} ]},
+        )
+        assert patched.status_code == 200, patched.text
+        approved = client.post(f"/approve/{approval_id}", json={})
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["ok"] is True
+    finally:
+        server.app.dependency_overrides.pop(server.trusted_identity, None)
+
+def test_create_plan_applies_without_double_write():
+    frappe = FakeFrappe()
+    plan = {
+        "id": "plan_create",
+        "tool": "manage_course",
+        "status": "pending",
+        "args": {"operation": "create", "title": "New", "description": "D", "short_introduction": "S"},
+        "items": [{"id": "create-course", "status": "pending", "payload": {"fields": {"title": "New", "description": "D", "short_introduction": "S"}}}],
+        "expected_modified": {},
+        "reversibility": "compensating",
+    }
+    selected, merged = plan_apply.apply_plan_selection(plan, None)
+    result = plan_executors.apply_manage_course_create(frappe, plan, merged)
+    assert result["status"] == "done"
+    assert len(frappe.docs["LMS Course"]) == 2
+    assert len(frappe.writes) == 1
+    assert result["undo"]["op"] == "delete"
+    assert result["undo"]["doctype"] == "LMS Course"
+    assert result["undo"]["name"] == "LMS Course-1"

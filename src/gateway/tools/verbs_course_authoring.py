@@ -21,6 +21,10 @@ ASSIGNMENT_FIELD_SET = {"title", "question", "type", "course", "grade_assignment
 EXERCISE_FIELD_SET = {"title", "problem_statement", "language", "test_cases"}
 
 
+def created_name(response: dict, fallback: str) -> str:
+    return _name(response, fallback)
+
+
 def snapshot_document(frappe, doctype: str, name: str) -> dict:
     return _data(frappe.get_document(doctype, name))
 
@@ -51,7 +55,6 @@ def create_quiz_questions(frappe, items: list[dict]) -> list[str]:
     try:
         for item in items or []:
             document = dict((item or {}).get("document") or {})
-            marks = (item or {}).get("marks", 1)
             result = frappe.create_document("LMS Question", document)
             created.append(_name(result, str(document.get("question") or "")))
     except Exception:
@@ -202,9 +205,24 @@ def register(reg: ToolRegistry, frappe) -> None:
                 fields["instructors"] = [{"instructor": item} for item in fields["instructors"]]
             if "related_courses" in fields:
                 fields["related_courses"] = [{"course": item} for item in fields["related_courses"]]
+            if _course_plan_is_preview(a):
+                return _course_plan_finish(
+                    action="manage_course", title="Xem trước tạo khóa học",
+                    summary=f"Xem trước tạo khóa học {fields.get('title', '')}.",
+                    args=a, operation=operation,
+                    items=[{
+                        "label": f"Tạo khóa học {fields.get('title', '')}", "kind": "create",
+                        "preview": {"before": None, "after": fields},
+                        "payload": {"doctype": "LMS Course", "fields": fields},
+                    }],
+                    changes=[_change("LMS Course", str(fields.get("title", "") or "(mới)"), "create")],
+                    expected_modified={},
+                    preview=f"Tạo LMS Course {fields.get('title', '')}.",
+                    view={"type": "course", "course": str(fields.get("title", "") or "")},
+                )
             result = frappe.create_document("LMS Course", fields)
             name = _name(result, fields["title"])
-            return action_result("manage_course", "Đã tạo khóa học", f"Đã tạo khóa học {fields['title']}.", [_change("LMS Course", name, "create")], view={"type": "course", "course": name})
+            return action_result("manage_course", "Đã tạo khóa học", f"Đã tạo khóa học {fields['title']}.", [_change("LMS Course", name, "create")], undo={"op": "delete", "doctype": "LMS Course", "name": name}, view={"type": "course", "course": name})
         course = _require(a.get("course"), "course")
         if operation == "delete":
             if _course_plan_is_preview(a):
@@ -256,7 +274,7 @@ def register(reg: ToolRegistry, frappe) -> None:
 
     _register_mutation(reg, "manage_course", "Tạo, cập nhật, xuất bản hoặc xóa khóa học LMS. Xóa là cascade và luôn cần phê duyệt rõ ràng.", {
         "type": "object", "properties": {
-            "operation": {"type": "string", "enum": ["create", "update", "delete"]}, "course": {"type": "string"},
+            "operation": {"type": "string", "enum": ["create", "update", "reorder"]}, "course": {"type": "string"},
             "title": {"type": "string"}, "description": {"type": "string"}, "short_introduction": {"type": "string"},
             "category": {"type": "string"}, "video_link": {"type": "string"}, "published": {"type": "integer", "enum": [0, 1]},
             "upcoming": {"type": "integer", "enum": [0, 1]}, "featured": {"type": "integer", "enum": [0, 1]},
@@ -273,19 +291,48 @@ def register(reg: ToolRegistry, frappe) -> None:
         operation = _require(a.get("operation"), "operation")
         if operation == "create":
             course, title = _require(a.get("course"), "course"), _require(a.get("title"), "title")
+            if _course_plan_is_preview(a):
+                course_doc = _data(frappe.get_document("LMS Course", course))
+                key = write_plans.plan_key("LMS Course", course)
+                return _course_plan_finish(
+                    action="manage_chapter", title="Xem trước tạo chương",
+                    summary=f"Xem trước tạo chương {title} trong {course}.",
+                    args=a, operation=operation,
+                    items=[
+                        {"label": f"Tạo chương {title}", "kind": "create", "preview": {"before": None, "after": {"course": course, "title": title}}, "payload": {"doctype": "Course Chapter", "fields": {"course": course, "title": title}}},
+                        {"label": f"Gắn chương vào {course}", "kind": "update", "preview": {"before": course_doc.get("chapters"), "after": "append chapter"}, "payload": {"doctype": "LMS Course", "name": course, "action": "append-chapter"}},
+                    ],
+                    changes=[_change("Course Chapter", "(mới)", "create"), _change("LMS Course", course, "update")],
+                    expected_modified={key: _course_plan_expected(course_doc)},
+                    preview=f"Tạo Course Chapter {title} trong {course}.",
+                    view={"type": "course", "course": course},
+                )
             created = frappe.create_document("Course Chapter", {"course": course, "title": title})
             chapter = _name(created, title)
             document = _data(frappe.get_document("LMS Course", course))
             chapters = _child_names(document, "chapters", "chapter")
             if chapter not in chapters:
                 _replace_child_table(frappe, "LMS Course", course, "chapters", "chapter", [*chapters, chapter])
-            return action_result("manage_chapter", "Đã tạo chương", f"Đã thêm {title} vào {course}.", [_change("Course Chapter", chapter, "create"), _change("LMS Course", course, "update")], view={"type": "course", "course": course})
+            return action_result("manage_chapter", "Đã tạo chương", f"Đã thêm {title} vào {course}.", [_change("Course Chapter", chapter, "create"), _change("LMS Course", course, "update")], undo={"op": "delete", "doctype": "Course Chapter", "name": chapter}, view={"type": "course", "course": course})
         if operation == "reorder":
             course = _require(a.get("course"), "course")
             ordered = [str(item) for item in a.get("ordered_chapters") or []]
-            current = _child_names(_data(frappe.get_document("LMS Course", course)), "chapters", "chapter")
+            course_doc = _data(frappe.get_document("LMS Course", course))
+            current = _child_names(course_doc, "chapters", "chapter")
             if len(ordered) != len(set(ordered)) or set(ordered) != set(current):
                 raise ValueError("ordered_chapters must contain every current chapter exactly once")
+            if _course_plan_is_preview(a):
+                key = write_plans.plan_key("LMS Course", course)
+                return _course_plan_finish(
+                    action="manage_chapter", title="Xem trước sắp xếp chương",
+                    summary=f"Xem trước sắp xếp {len(ordered)} chương trong {course}.",
+                    args=a, operation=operation,
+                    items=[{"label": f"Sắp xếp {len(ordered)} chương", "kind": "reorder", "preview": {"before": current, "after": ordered}, "payload": {"doctype": "LMS Course", "name": course, "fields": {"ordered_chapters": ordered}}}],
+                    changes=[_change("LMS Course", course, "reorder")],
+                    expected_modified={key: _course_plan_expected(course_doc)},
+                    preview=f"Sắp xếp {len(ordered)} chương trong {course}.",
+                    view={"type": "course", "course": course},
+                )
             _replace_child_table(frappe, "LMS Course", course, "chapters", "chapter", ordered)
             return action_result("manage_chapter", "Đã sắp xếp chương", f"Đã sắp xếp {len(ordered)} chương trong {course}.", [_change("LMS Course", course, "reorder")], undo={"op": "restore", "doctype": "LMS Course", "name": course, "fields": {"chapters": [{"chapter": item} for item in current]}}, view={"type": "course", "course": course})
         chapter = _require(a.get("chapter"), "chapter")
@@ -325,7 +372,7 @@ def register(reg: ToolRegistry, frappe) -> None:
         return action_result("manage_chapter", "Đã cập nhật chương", f"Đã đổi tiêu đề chương {chapter}.", [_change("Course Chapter", chapter, "update")], undo={"op": "restore", "doctype": "Course Chapter", "name": chapter, "fields": {"title": before.get("title", "")}})
 
     _register_mutation(reg, "manage_chapter", "Tạo, đổi tên, sắp xếp hoặc xóa chương; tự đồng bộ bảng chương của khóa học.", {
-        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update", "reorder", "delete"]}, "course": {"type": "string"}, "chapter": {"type": "string"}, "title": {"type": "string"}, "ordered_chapters": {"type": "array", "items": {"type": "string"}}, "dry_run": {"type": "boolean"}}, "required": ["operation"],
+        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update", "reorder"]}, "course": {"type": "string"}, "chapter": {"type": "string"}, "title": {"type": "string"}, "ordered_chapters": {"type": "array", "items": {"type": "string"}}, "dry_run": {"type": "boolean"}}, "required": ["operation"],
     }, manage_chapter)
 
     lesson_fields = {"title", "body", "content", "youtube", "include_in_preview", "instructor_content", "instructor_notes", "quiz_id", "question", "file_type"}
@@ -337,16 +384,44 @@ def register(reg: ToolRegistry, frappe) -> None:
             chapter = _require(a.get("chapter"), "chapter")
             title = _require(a.get("title"), "title")
             fields = {"course": course, "chapter": chapter, **_pick(a, lesson_fields)}
+            if _course_plan_is_preview(a):
+                chapter_doc = _data(frappe.get_document("Course Chapter", chapter))
+                key = write_plans.plan_key("Course Chapter", chapter)
+                return _course_plan_finish(
+                    action="manage_lesson", title="Xem trước tạo bài học",
+                    summary=f"Xem trước tạo bài {title} trong {chapter}.",
+                    args=a, operation=operation,
+                    items=[
+                        {"label": f"Tạo bài {title}", "kind": "create", "preview": {"before": None, "after": fields}, "payload": {"doctype": "Course Lesson", "fields": fields}},
+                        {"label": f"Gắn bài vào {chapter}", "kind": "update", "preview": {"before": chapter_doc.get("lessons"), "after": "append lesson"}, "payload": {"doctype": "Course Chapter", "name": chapter, "action": "append-lesson"}},
+                    ],
+                    changes=[_change("Course Lesson", "(mới)", "create"), _change("Course Chapter", chapter, "update")],
+                    expected_modified={key: _course_plan_expected(chapter_doc)},
+                    preview=f"Tạo Course Lesson {title} trong {chapter}.",
+                    view={"type": "course", "course": course},
+                )
             created = frappe.create_document("Course Lesson", fields)
             lesson = _name(created, title)
             ensure_lesson_reference(frappe, chapter, lesson)
-            return action_result("manage_lesson", "Đã tạo bài học", f"Đã thêm {title} vào {chapter}.", [_change("Course Lesson", lesson, "create"), _change("Course Chapter", chapter, "update")], view={"type": "course", "course": course})
+            return action_result("manage_lesson", "Đã tạo bài học", f"Đã thêm {title} vào {chapter}.", [_change("Course Lesson", lesson, "create"), _change("Course Chapter", chapter, "update")], undo={"op": "delete", "doctype": "Course Lesson", "name": lesson}, view={"type": "course", "course": course})
         if operation == "reorder":
             chapter = _require(a.get("chapter"), "chapter")
             ordered = [str(item) for item in a.get("ordered_lessons") or []]
-            current = _child_names(_data(frappe.get_document("Course Chapter", chapter)), "lessons", "lesson")
+            chapter_doc = _data(frappe.get_document("Course Chapter", chapter))
+            current = _child_names(chapter_doc, "lessons", "lesson")
             if len(ordered) != len(set(ordered)) or set(ordered) != set(current):
                 raise ValueError("ordered_lessons must contain every current lesson exactly once")
+            if _course_plan_is_preview(a):
+                key = write_plans.plan_key("Course Chapter", chapter)
+                return _course_plan_finish(
+                    action="manage_lesson", title="Xem trước sắp xếp bài học",
+                    summary=f"Xem trước sắp xếp {len(ordered)} bài trong {chapter}.",
+                    args=a, operation=operation,
+                    items=[{"label": f"Sắp xếp {len(ordered)} bài", "kind": "reorder", "preview": {"before": current, "after": ordered}, "payload": {"doctype": "Course Chapter", "name": chapter, "fields": {"ordered_lessons": ordered}}}],
+                    changes=[_change("Course Chapter", chapter, "reorder")],
+                    expected_modified={key: _course_plan_expected(chapter_doc)},
+                    preview=f"Sắp xếp {len(ordered)} bài trong {chapter}.",
+                )
             _replace_child_table(frappe, "Course Chapter", chapter, "lessons", "lesson", ordered)
             return action_result("manage_lesson", "Đã sắp xếp bài học", f"Đã sắp xếp {len(ordered)} bài trong {chapter}.", [_change("Course Chapter", chapter, "reorder")], undo={"op": "restore", "doctype": "Course Chapter", "name": chapter, "fields": {"lessons": [{"lesson": item} for item in current]}})
         lesson = _require(a.get("lesson"), "lesson")
@@ -392,7 +467,7 @@ def register(reg: ToolRegistry, frappe) -> None:
         return action_result("manage_lesson", "Đã cập nhật bài học", f"Đã cập nhật {len(fields)} trường của {lesson}.", [_change("Course Lesson", lesson, "update")], undo={"op": "restore", "doctype": "Course Lesson", "name": lesson, "fields": {key: before.get(key) for key in fields}}, view={"type": "course", "course": before.get("course")})
 
     _register_mutation(reg, "manage_lesson", "Tạo, sửa nội dung/EditorJS, sắp xếp hoặc xóa bài học; tự đồng bộ bảng bài của chương.", {
-        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update", "reorder", "delete"]}, "course": {"type": "string"}, "chapter": {"type": "string"}, "lesson": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "content": {"type": "string", "description": "EditorJS JSON"}, "youtube": {"type": "string"}, "include_in_preview": {"type": "integer", "enum": [0, 1]}, "instructor_content": {"type": "string"}, "instructor_notes": {"type": "string"}, "quiz_id": {"type": "string"}, "question": {"type": "string"}, "file_type": {"type": "string"}, "ordered_lessons": {"type": "array", "items": {"type": "string"}}, "dry_run": {"type": "boolean"}}, "required": ["operation"],
+        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update", "reorder"]}, "course": {"type": "string"}, "chapter": {"type": "string"}, "lesson": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "content": {"type": "string", "description": "EditorJS JSON"}, "youtube": {"type": "string"}, "include_in_preview": {"type": "integer", "enum": [0, 1]}, "instructor_content": {"type": "string"}, "instructor_notes": {"type": "string"}, "quiz_id": {"type": "string"}, "question": {"type": "string"}, "file_type": {"type": "string"}, "ordered_lessons": {"type": "array", "items": {"type": "string"}}, "dry_run": {"type": "boolean"}}, "required": ["operation"],
     }, manage_lesson)
 
     def manage_lesson_block(a: dict):
@@ -633,7 +708,7 @@ def register(reg: ToolRegistry, frappe) -> None:
         return action_result("manage_quiz", "Đã cập nhật quiz", f"Đã cập nhật quiz {quiz}.", changes, undo=undo)
 
     _register_mutation(reg, "manage_quiz", "Tạo, sửa hoặc xóa quiz và tối đa 10 lựa chọn cho từng câu hỏi. Có thể gắn quiz với course/lesson.", {
-        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update", "delete"]}, "quiz": {"type": "string"}, "title": {"type": "string"}, "course": {"type": "string"}, "lesson": {"type": "string"}, "max_attempts": {"type": "integer"}, "show_answers": {"type": "integer", "enum": [0, 1]}, "show_submission_history": {"type": "integer", "enum": [0, 1]}, "passing_percentage": {"type": "integer", "minimum": 0, "maximum": 100}, "duration": {"type": "integer"}, "shuffle_questions": {"type": "integer", "enum": [0, 1]}, "limit_questions_to": {"type": "integer"}, "enable_negative_marking": {"type": "integer", "enum": [0, 1]}, "marks_to_cut": {"type": "number"}, "questions": {"type": "array", "items": question_schema}, "dry_run": {"type": "boolean", "description": "Preview-only plan; performs reads and returns pending_approval without Frappe writes"}}, "required": ["operation"],
+        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update"]}, "quiz": {"type": "string"}, "title": {"type": "string"}, "course": {"type": "string"}, "lesson": {"type": "string"}, "max_attempts": {"type": "integer"}, "show_answers": {"type": "integer", "enum": [0, 1]}, "show_submission_history": {"type": "integer", "enum": [0, 1]}, "passing_percentage": {"type": "integer", "minimum": 0, "maximum": 100}, "duration": {"type": "integer"}, "shuffle_questions": {"type": "integer", "enum": [0, 1]}, "limit_questions_to": {"type": "integer"}, "enable_negative_marking": {"type": "integer", "enum": [0, 1]}, "marks_to_cut": {"type": "number"}, "questions": {"type": "array", "items": question_schema}, "dry_run": {"type": "boolean", "description": "Preview-only plan; performs reads and returns pending_approval without Frappe writes"}}, "required": ["operation"],
     }, manage_quiz)
 
     def _simple_manager(a: dict, *, doctype: str, action: str, allowed: set[str], required: tuple[str, ...]):
@@ -706,12 +781,12 @@ def register(reg: ToolRegistry, frappe) -> None:
         return _simple_manager(a, doctype="LMS Assignment", action="manage_assignment", allowed={"title", "question", "type", "course", "grade_assignment", "show_answer", "answer"}, required=("title", "question", "type"))
 
     _register_mutation(reg, "manage_assignment", "Tạo, sửa hoặc xóa assignment của khóa học, gồm đề bài, loại nộp, đáp án và chế độ chấm.", {
-        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update", "delete"]}, "name": {"type": "string"}, "title": {"type": "string"}, "question": {"type": "string"}, "type": {"type": "string", "enum": ["Document", "PDF", "URL", "Image", "Text"]}, "course": {"type": "string"}, "grade_assignment": {"type": "integer", "enum": [0, 1]}, "show_answer": {"type": "integer", "enum": [0, 1]}, "answer": {"type": "string"}, "dry_run": {"type": "boolean", "description": "Preview-only plan; performs reads and returns pending_approval without Frappe writes"}}, "required": ["operation"],
+        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update"]}, "name": {"type": "string"}, "title": {"type": "string"}, "question": {"type": "string"}, "type": {"type": "string", "enum": ["Document", "PDF", "URL", "Image", "Text"]}, "course": {"type": "string"}, "grade_assignment": {"type": "integer", "enum": [0, 1]}, "show_answer": {"type": "integer", "enum": [0, 1]}, "answer": {"type": "string"}, "dry_run": {"type": "boolean", "description": "Preview-only plan; performs reads and returns pending_approval without Frappe writes"}}, "required": ["operation"],
     }, manage_assignment)
 
     def manage_programming_exercise(a: dict):
         return _simple_manager(a, doctype="LMS Programming Exercise", action="manage_programming_exercise", allowed={"title", "problem_statement", "language", "test_cases"}, required=("title", "problem_statement", "language"))
 
     _register_mutation(reg, "manage_programming_exercise", "Tạo, sửa hoặc xóa bài lập trình với ngôn ngữ và test case đầu vào/đầu ra.", {
-        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update", "delete"]}, "name": {"type": "string"}, "title": {"type": "string"}, "problem_statement": {"type": "string"}, "language": {"type": "string", "enum": ["Python", "JavaScript", "Rust", "Go"]}, "test_cases": {"type": "array", "items": {"type": "object", "properties": {"input": {"type": "string"}, "expected_output": {"type": "string"}}, "required": ["expected_output"]}}, "dry_run": {"type": "boolean", "description": "Preview-only plan; performs reads and returns pending_approval without Frappe writes"}}, "required": ["operation"],
+        "type": "object", "properties": {"operation": {"type": "string", "enum": ["create", "update"]}, "name": {"type": "string"}, "title": {"type": "string"}, "problem_statement": {"type": "string"}, "language": {"type": "string", "enum": ["Python", "JavaScript", "Rust", "Go"]}, "test_cases": {"type": "array", "items": {"type": "object", "properties": {"input": {"type": "string"}, "expected_output": {"type": "string"}}, "required": ["expected_output"]}}, "dry_run": {"type": "boolean", "description": "Preview-only plan; performs reads and returns pending_approval without Frappe writes"}}, "required": ["operation"],
     }, manage_programming_exercise)

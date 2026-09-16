@@ -72,6 +72,24 @@ def request_approval(
     return approval_id
 
 
+def peek_approval(approval_id: str, approved_by: str, approver_role: str) -> dict | None:
+    """Read a pending approval and check role without consuming its single use."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM approvals WHERE id=? AND status='pending'", (approval_id,)
+        ).fetchone()
+        if not row:
+            return None
+        required_roles = set(json.loads(row["required_roles"] or "[]"))
+        if approver_role not in required_roles:
+            raise PermissionError("role is not allowed to approve this action")
+        stored_plan = row["plan_id"] if "plan_id" in row.keys() else ""
+        return {
+            "id": row["id"], "tool": row["tool"], "args": json.loads(row["args"]),
+            "plan_id": str(stored_plan or ""),
+        }
+
+
 def approve(approval_id: str, approved_by: str, approver_role: str) -> dict | None:
     """Atomically claim a pending approval. A claimed ID cannot be reused."""
     with _conn() as conn:

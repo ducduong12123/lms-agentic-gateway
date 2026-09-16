@@ -80,6 +80,41 @@ def _assert_no_writes(frappe):
     assert frappe.writes == {"create": 0, "update": 0, "delete": 0, "call": 0}
 
 
+def test_every_write_operation_dry_run_performs_zero_writes(tmp_path, monkeypatch):
+    _isolate_db(monkeypatch, tmp_path)
+    frappe = FakeFrappe()
+    registry = _registry(frappe)
+    calls = [
+        ("manage_course", {"operation": "create", "title": "T", "description": "D", "short_introduction": "S", "dry_run": True}),
+        ("manage_course", {"operation": "update", "course": "PY-101", "title": "T2", "dry_run": True}),
+        ("manage_chapter", {"operation": "create", "course": "PY-101", "title": "CH", "dry_run": True}),
+        ("manage_chapter", {"operation": "update", "chapter": "CH-1", "title": "CH2", "dry_run": True}),
+        ("manage_chapter", {"operation": "reorder", "course": "PY-101", "ordered_chapters": ["CH-1"], "dry_run": True}),
+        ("manage_lesson", {"operation": "create", "course": "PY-101", "chapter": "CH-1", "title": "LS", "dry_run": True}),
+        ("manage_lesson", {"operation": "update", "lesson": "LS-1", "title": "LS2", "dry_run": True}),
+        ("manage_lesson", {"operation": "reorder", "chapter": "CH-1", "ordered_lessons": ["LS-1"], "dry_run": True}),
+        ("manage_lesson_block", {"operation": "attach", "lesson": "LS-1", "block_type": "quiz", "resource": "Q-9", "dry_run": True}),
+        ("manage_quiz", {"operation": "create", "title": "Q", "questions": [{"question": "QQ?", "type": "Choices", "marks": 1, "options": [{"text": "A"}]}], "dry_run": True}),
+        ("manage_quiz", {"operation": "update", "quiz": "QZ-1", "title": "Q2", "dry_run": True}),
+        ("manage_assignment", {"operation": "create", "title": "A", "question": "Q?", "type": "Text", "dry_run": True}),
+        ("manage_assignment", {"operation": "update", "name": "AS-1", "title": "A2", "dry_run": True}),
+        ("manage_programming_exercise", {"operation": "create", "title": "E", "problem_statement": "P", "language": "Python", "dry_run": True}),
+        ("manage_programming_exercise", {"operation": "update", "name": "EX-1", "title": "E2", "dry_run": True}),
+    ]
+    for tool_name, args in calls:
+        frappe.writes = {"create": 0, "update": 0, "delete": 0, "call": 0}
+        result = registry.get(tool_name).func(dict(args))
+        assert result.get("status") == "pending_approval", (tool_name, args.get("operation"), result)
+        assert result.get("plan_id"), (tool_name, args.get("operation"))
+        _assert_no_writes(frappe)
+
+
+def test_delete_operations_are_not_offered_by_tool_schemas():
+    frappe = FakeFrappe()
+    registry = _registry(frappe)
+    for tool_name in ("manage_course", "manage_chapter", "manage_lesson", "manage_quiz", "manage_assignment", "manage_programming_exercise"):
+        operations = registry.get(tool_name).parameters["properties"]["operation"]["enum"]
+        assert "delete" not in operations, tool_name
 def test_manage_course_update_preview(tmp_path, monkeypatch):
     _isolate_db(monkeypatch, tmp_path)
     frappe = FakeFrappe()
