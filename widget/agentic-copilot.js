@@ -67,11 +67,7 @@
     ".acp-canvas-body{max-width:760px;margin:0 auto;padding:24px}.acp-canvas-card{background:#1b1b1b;border:1px solid #303030;border-radius:12px;padding:16px;margin-bottom:12px}",
     ".acp-canvas-card h3{margin:0 0 8px;color:#fff;font-size:15px}.acp-canvas-card p{margin:6px 0;color:#c6c6c6;line-height:1.55}",
     ".acp-canvas-card pre{white-space:pre-wrap;color:#cfcfcf;font:inherit;line-height:1.55}.acp-canvas-card button,.acp-action-card button{background:#2f81f7;color:#fff;border:0;border-radius:7px;padding:7px 11px;cursor:pointer}",
-    ".acp-review-item{border-top:1px solid #303030;padding:14px 0}.acp-review-item:first-child{border-top:0}.acp-review-item textarea{display:block;width:100%;box-sizing:border-box;min-height:80px;margin:10px 0;background:#111;border:1px solid #3a3a3a;border-radius:7px;color:#eee;padding:8px;font:inherit}",
-    "#acp-queue{display:none;margin:10px 14px 0;padding:10px 12px;border:1px solid #303d58;background:#151d2b;border-radius:9px;color:#cbd8f5;font-size:12px;line-height:1.45}",
-    "#acp-queue.show{display:block}.acp-queue-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0}.acp-queue-row b{color:#fff}.acp-queue-button{width:100%;border:0;background:transparent;color:inherit;text-align:left;font:inherit;border-radius:6px;cursor:pointer}.acp-queue-button:hover{background:#202b3d}.acp-queue-detail{border-top:1px solid #30405a;margin-top:6px;padding-top:8px}.acp-queue-approval{padding:7px 0;border-bottom:1px solid #29364b}.acp-queue-approval:last-child{border-bottom:0}.acp-queue-approval-title{color:#fff;font-size:12px;word-break:break-word}.acp-queue-approval-meta{color:#9fb0c9;font-size:11px;margin-top:3px}.acp-queue-approval button{margin-top:6px;background:#2f81f7;color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer;font-weight:600}.acp-queue-back{margin:0;padding:0;border:0;background:transparent;color:#9fb0c9;font:inherit;cursor:pointer}.acp-queue-back:hover{color:#fff}",
     ".acp-action-card{margin-top:12px;padding:12px;border:1px solid #31527d;background:#152337;border-radius:10px;color:#d9e7fa}.acp-action-card h4{margin:0 0 5px;color:#fff;font-size:13px}.acp-action-card p{margin:4px 0;line-height:1.45}.acp-action-changes{margin:8px 0;padding-left:18px;color:#b8c6d9;font-size:12px}.acp-action-card button{margin:4px 6px 0 0;font-size:12px}.acp-action-card button.secondary{background:#283342;color:#d6e2f0}",
-    ".acp-fab-badge{position:absolute;right:-3px;top:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:#2f81f7;color:#fff;font-size:10px;line-height:16px}",
     "#acp-head{position:relative;display:flex;align-items:center;gap:6px;padding:8px 10px 8px 12px;border-bottom:1px solid #1f1f1f;background:#111}",
     "#acp-avatar{width:26px;height:26px;flex:0 0 auto;border-radius:50%;background:#e8e8e8;color:#333;",
     "display:flex;align-items:center;justify-content:center;font-size:13px}",
@@ -207,7 +203,6 @@
     "#acp-auto{background:var(--acp-surface-muted);border-color:var(--acp-border);color:var(--acp-ink-muted)}#acp-auto:hover{background:var(--acp-surface-raised);color:var(--acp-ink);border-color:var(--acp-border-strong)}",
     "#acp-send.ready{background:var(--acp-accent);color:#fff}#acp-send{background:var(--acp-surface-raised);color:var(--acp-ink-muted)}",
     ".acp-u{background:var(--acp-surface-raised);color:var(--acp-ink)}.acp-action-card{background:var(--acp-accent-soft);border-color:var(--acp-accent);color:var(--acp-ink)}.acp-action-card h4{color:var(--acp-ink)}.acp-action-card p,.acp-action-changes{color:var(--acp-ink-muted)}.acp-action-card button{background:var(--acp-accent)}.acp-action-card button.secondary{background:var(--acp-surface-raised);color:var(--acp-ink)}",
-    "#acp-queue{background:var(--acp-accent-soft);border-color:var(--acp-accent);color:var(--acp-ink-muted)}.acp-queue-row b,.acp-queue-approval-title{color:var(--acp-ink)}.acp-queue-approval-meta{color:var(--acp-ink-subtle)}",
     "#acp-insight{background:var(--surface-green-1,var(--acp-surface-muted));border-color:var(--outline-green-3,var(--acp-border));color:var(--acp-ink-muted)}#acp-insight b{color:var(--acp-ink)}",
     ".acp-canvas-head{border-color:var(--acp-border)}.acp-canvas-card{background:var(--acp-surface-muted);border-color:var(--acp-border)}.acp-canvas-card h3{color:var(--acp-ink)}.acp-canvas-card p,.acp-canvas-card pre{color:var(--acp-ink-muted)}",
     "#acp-pop.acp-approval-pop{left:auto;right:8px;bottom:52px;width:296px;max-width:calc(100% - 16px);padding:0;background:var(--acp-surface);border-color:var(--acp-border);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.14);overflow:hidden}",
@@ -233,7 +228,7 @@
   document.head.appendChild(pushStyle);
   var fab = document.createElement("button");
   fab.id = "acp-fab";
-  fab.innerHTML = "<span>✦</span><span class=\"acp-fab-badge\" hidden></span>";
+  fab.innerHTML = "<span>✦</span>";
   fab.title = "Trợ lý LMS (Alt+C)";
   var side = document.createElement("div");
   side.id = "acp-side";
@@ -245,7 +240,7 @@
     '<button id="acp-wide" class="acp-hbtn" title="rộng/hẹp (Alt+M)" aria-label="Rộng hoặc hẹp">▭</button>' +
     '<button id="acp-more" class="acp-hbtn" title="Tùy chọn" aria-label="Tùy chọn">⋯</button>' +
     '<button id="acp-x" class="acp-hbtn" title="đóng" aria-label="Đóng">»</button></div>' +
-    '<div id="acp-hist"></div><div id="acp-queue"></div><div id="acp-insight" hidden></div>' +
+    '<div id="acp-hist"></div>' +
     '<div id="acp-msgs"></div><div id="acp-type"><i></i><i></i><i></i> AI đang soạn…</div>' +
     '<div id="acp-inbar"><div id="acp-pop"></div><div class="acp-composer">' +
     '<div class="acp-chiprow"><button id="acp-chip" title="Trạng thái học tập" type="button">◎ <span id="acp-chip-t">LMS</span></button></div>' +
@@ -292,10 +287,8 @@
   var addBtn = side.querySelector("#acp-add");
   var modeBtn = side.querySelector("#acp-mode");
   var approvalBtn = side.querySelector("#acp-approval");
-  var queueBox = side.querySelector("#acp-queue");
   var canvasTitle = canvas.querySelector("#acp-canvas-title");
   var canvasBody = canvas.querySelector(".acp-canvas-body");
-  var fabBadge = fab.querySelector(".acp-fab-badge");
   var autoBtn = side.querySelector("#acp-auto");
   var insight = side.querySelector("#acp-insight");
   var histBox = side.querySelector("#acp-hist");
@@ -471,77 +464,8 @@
         insight.hidden = false;
       }).catch(function () { insight.hidden = true; });
   }
-  function approvalTarget(approval) {
-    var args = approval.args || {};
-    return args.lesson || args.course || args.batch || args.title || "";
-  }
-  function showApprovalQueue(approvals) {
-    queueBox.replaceChildren();
-    var heading = document.createElement("div");
-    heading.textContent = "Phê duyệt đang chờ";
-    heading.style.cssText = "font-weight:600;color:#fff;margin-bottom:5px";
-    queueBox.appendChild(heading);
-    var back = document.createElement("button");
-    back.type = "button";
-    back.textContent = "← Quay lại";
-    back.className = "acp-queue-back";
-    back.onclick = refreshQueue;
-    queueBox.appendChild(back);
-    var detail = document.createElement("div");
-    detail.className = "acp-queue-detail";
-    approvals.forEach(function (approval) {
-      var item = document.createElement("div");
-      item.className = "acp-queue-approval";
-      var title = document.createElement("div");
-      title.className = "acp-queue-approval-title";
-      title.textContent = approval.tool + (approvalTarget(approval) ? " · " + approvalTarget(approval) : "");
-      item.appendChild(title);
-      var meta = document.createElement("div");
-      meta.className = "acp-queue-approval-meta";
-      meta.textContent = approval.requested_by ? "Yêu cầu bởi " + approval.requested_by : "Đang chờ phê duyệt";
-      item.appendChild(meta);
-      var button = document.createElement("button");
-      button.type = "button";
-      button.textContent = "Duyệt & chạy";
-      button.onclick = function () { approve(approval.id || approval.approval_id, button); };
-      item.appendChild(button);
-      detail.appendChild(item);
-    });
-    queueBox.appendChild(detail);
-  }
 
-  function appendQueueRow(count, label, onClick) {
-    if (!count) return;
-    var row = document.createElement(onClick ? "button" : "div");
-    row.className = "acp-queue-row" + (onClick ? " acp-queue-button" : "");
-    if (onClick) {
-      row.type = "button";
-      row.setAttribute("aria-label", label + ", " + count + " mục");
-      row.onclick = onClick;
-    }
-    var labelNode = document.createElement("span"); labelNode.textContent = label;
-    var countNode = document.createElement("b"); countNode.textContent = String(count);
-    row.appendChild(labelNode); row.appendChild(countNode); queueBox.appendChild(row);
-  }
 
-  function refreshQueue() {
-    fetch(GATEWAY + "/queue", { credentials: "same-origin" })
-      .then(function (r) { if (!r.ok) throw new Error("queue unavailable"); return r.json(); })
-      .then(function (data) {
-        var plans = data.plans || [], approvals = data.approvals || [], reviews = data.reviews || [];
-        var total = plans.length + approvals.length + reviews.length;
-        fabBadge.textContent = total > 99 ? "99+" : String(total);
-        fabBadge.hidden = total === 0;
-        queueBox.replaceChildren();
-        if (!total) { queueBox.classList.remove("show"); return; }
-        queueBox.classList.add("show");
-        appendQueueRow(plans.length, "kế hoạch");
-        appendQueueRow(approvals.length, "phê duyệt", function () { showApprovalQueue(approvals); });
-        appendQueueRow(reviews.length, "lịch ôn");
-        chipT.textContent = total + " việc cần làm";
-      })
-      .catch(function () { fabBadge.hidden = true; queueBox.classList.remove("show"); });
-  }
   function syncSend() { sendBtn.classList.toggle("ready", input.value.trim().length > 0); }
   function esc(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -812,14 +736,12 @@
         btn.textContent = "Đã duyệt ✓";
         if (j.result && j.result.kind === "action") addAssistant("", [], [], null, [j.result], j.result.directives || []);
         else addAssistant("Đã thực hiện sau phê duyệt: " + JSON.stringify(j.result).slice(0, 800), [], []);
-        refreshQueue();
       })
       .catch(function (err) {
         var message = String(err && err.message || "Không rõ lỗi").replace(/\s+/g, " ").slice(0, 180);
         var retryable = !err || err.retryable !== false;
         btn.textContent = (retryable ? "Lỗi: " : "Thất bại: ") + message;
         btn.disabled = !retryable;
-        if (!retryable) refreshQueue();
       });
   }
   function send(text) {
@@ -843,7 +765,7 @@
         });
       }
       if (!r.body || !r.body.getReader) {
-        return r.json().then(function (j) { addAssistant(j.answer, j.tool_calls, j.approvals, j.timings, j.actions, j.directives); refreshQueue(); });
+        return r.json().then(function (j) { addAssistant(j.answer, j.tool_calls, j.approvals, j.timings, j.actions, j.directives); });
       }
       return streamSSE(r.body.getReader(), t0);
     }).catch(function (e) {
@@ -969,7 +891,6 @@
       if (!box.dataset.directiveSeen) (ev.directives || []).forEach(handleDirective);
       assistantActions(box);
       msgs.scrollTop = msgs.scrollHeight;
-      refreshQueue();
     }
     function pump() {
       return reader.read().then(function (r) {
@@ -1002,7 +923,7 @@
     side.classList.toggle("open", !!on);
     document.body.classList.toggle("acp-open", !!on);
     syncShellBody();
-    if (on) { syncUiChrome(); syncSend(); refreshQueue(); input.focus(); }
+    if (on) { syncUiChrome(); syncSend(); input.focus(); }
   }
   canvas.querySelector(".acp-canvas-close").onclick = function () { canvas.classList.remove("show"); };
   function toggleShell() {
@@ -1198,8 +1119,8 @@
       if (!response.ok) throw new Error("unauthorized");
       return response.json();
     })
-    .then(function (identity) { CURRENT_IDENTITY = identity; loadApprovalMode(); syncUiChrome(); refreshInsight(); refreshQueue(); loadHistory(); })
-    .catch(function () { CURRENT_IDENTITY = { user: "Guest", role: "student", roles: [] }; syncUiChrome(); refreshQueue(); });
+    .then(function (identity) { CURRENT_IDENTITY = identity; loadApprovalMode(); syncUiChrome(); refreshInsight(); loadHistory(); })
+    .catch(function () { CURRENT_IDENTITY = { user: "Guest", role: "student", roles: [] }; syncUiChrome(); });
   syncUiChrome();
   syncApprovalButton();
   syncSend();
@@ -1215,6 +1136,6 @@
   var lastRoute = location.pathname + location.search;
   setInterval(function () {
     var nextRoute = location.pathname + location.search;
-    if (nextRoute !== lastRoute) { lastRoute = nextRoute; syncUiChrome(); refreshInsight(); refreshQueue(); }
+    if (nextRoute !== lastRoute) { lastRoute = nextRoute; syncUiChrome(); refreshInsight(); }
   }, 1000);
 })();

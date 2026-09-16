@@ -23,3 +23,6 @@ def test_widget_does_not_claim_identity():
     assert "MutationObserver(syncLmsTheme)" in source
     assert "width:296px" in source
     assert ".acp-composer{background:var(--acp-surface)" in source
+    assert 'id="acp-queue"' not in source
+    assert "refreshQueue" not in source
+    assert "acp-fab-badge" not in source
