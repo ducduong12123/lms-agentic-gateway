@@ -30,6 +30,15 @@ def test_widget_does_not_claim_identity():
     assert 'svgIcon("shieldCheck", "approval-icon")' in source
     assert 'svgIcon(item.icon, "icon")' in source
     assert "⌄" not in source
+    assert 'var CURRENT_EFFORT = "medium"' in source
+    assert 'id="acp-effort"' in source
+    assert 'id="acp-effort-range"' in source
+    assert "acp-effort-labels" in source
+    assert "acp-effort-model" not in source
+    assert "acp-effort-reset" not in source
+    assert "acp-auto" not in source
+    assert 'setEffort("auto"' not in source
+    assert "overflow-x:hidden" in source
     assert 'id="acp-queue"' not in source
     assert "refreshQueue" not in source
     assert "acp-fab-badge" not in source
