@@ -18,3 +18,8 @@ def test_widget_does_not_claim_identity():
     assert '"full_access"' in source
     assert "Hỏi trước khi làm" in source
     assert "Toàn quyền" in source
+    assert ":host{--acp-surface:var(--surface-base" in source
+    assert "data-theme" in source
+    assert "MutationObserver(syncLmsTheme)" in source
+    assert "width:296px" in source
+    assert ".acp-composer{background:var(--acp-surface)" in source

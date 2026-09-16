@@ -196,6 +196,27 @@
     "#acp-side.shell{right:0;top:0;bottom:0;width:100vw;max-width:100vw;border-radius:0}body.acp-shell-open{padding-right:0!important}",
     "body.acp-shell-open #app > .w-screen{width:100vw!important}#acp-fab{right:16px;bottom:16px}}",
     ".acp-cursor{display:inline-block;width:7px;height:15px;background:#2f81f7;vertical-align:-2px;margin-left:2px;animation:acpb .8s infinite}",
+    ":host{--acp-surface:var(--surface-base,#fff);--acp-surface-muted:var(--surface-gray-1,#f8f9fa);--acp-surface-raised:var(--surface-gray-2,#f1f3f5);--acp-border:var(--outline-gray-2,#e2e5e8);--acp-border-strong:var(--outline-gray-3,#cbd0d5);--acp-ink:var(--ink-gray-8,#202124);--acp-ink-muted:var(--ink-gray-6,#687078);--acp-ink-subtle:var(--ink-gray-5,#8a9096);--acp-accent:var(--blue-600,#3b82f6);--acp-accent-soft:var(--surface-blue-1,#eff6ff);--acp-danger:var(--surface-red-6,#d64545);color-scheme:light}",
+    ":host([data-theme='dark']){color-scheme:dark}",
+    "#acp-side,#acp-canvas{background:var(--acp-surface);color:var(--acp-ink);border-color:var(--acp-border)}",
+    "#acp-head,#acp-msgs,#acp-inbar,#acp-type{background:var(--acp-surface);color:var(--acp-ink);border-color:var(--acp-border)}",
+    "#acp-head{background:var(--acp-surface-muted)}#acp-title,.acp-a{color:var(--acp-ink)}#acp-head-main{background:transparent;color:var(--acp-ink)}#acp-head-main:hover{background:var(--acp-surface-raised)}",
+    ".acp-hbtn,.acp-toolbtn,#acp-approval{color:var(--acp-ink-muted)}.acp-hbtn:hover,.acp-toolbtn:hover,#acp-approval:hover{background:var(--acp-surface-raised);color:var(--acp-ink)}",
+    "#acp-pop,#acp-hist{background:var(--acp-surface);border-color:var(--acp-border-strong);color:var(--acp-ink)}#acp-pop button{color:var(--acp-ink)}#acp-pop button:hover{background:var(--acp-surface-raised)}",
+    "#acp-in{color:var(--acp-ink)}#acp-in::placeholder{color:var(--acp-ink-subtle)}#acp-chip{background:var(--acp-surface-muted);border-color:var(--acp-border);color:var(--acp-ink-muted)}#acp-chip:hover{background:var(--acp-surface-raised)}",
+    "#acp-auto{background:var(--acp-surface-muted);border-color:var(--acp-border);color:var(--acp-ink-muted)}#acp-auto:hover{background:var(--acp-surface-raised);color:var(--acp-ink);border-color:var(--acp-border-strong)}",
+    "#acp-send.ready{background:var(--acp-accent);color:#fff}#acp-send{background:var(--acp-surface-raised);color:var(--acp-ink-muted)}",
+    ".acp-u{background:var(--acp-surface-raised);color:var(--acp-ink)}.acp-action-card{background:var(--acp-accent-soft);border-color:var(--acp-accent);color:var(--acp-ink)}.acp-action-card h4{color:var(--acp-ink)}.acp-action-card p,.acp-action-changes{color:var(--acp-ink-muted)}.acp-action-card button{background:var(--acp-accent)}.acp-action-card button.secondary{background:var(--acp-surface-raised);color:var(--acp-ink)}",
+    "#acp-queue{background:var(--acp-accent-soft);border-color:var(--acp-accent);color:var(--acp-ink-muted)}.acp-queue-row b,.acp-queue-approval-title{color:var(--acp-ink)}.acp-queue-approval-meta{color:var(--acp-ink-subtle)}",
+    "#acp-insight{background:var(--surface-green-1,var(--acp-surface-muted));border-color:var(--outline-green-3,var(--acp-border));color:var(--acp-ink-muted)}#acp-insight b{color:var(--acp-ink)}",
+    ".acp-canvas-head{border-color:var(--acp-border)}.acp-canvas-card{background:var(--acp-surface-muted);border-color:var(--acp-border)}.acp-canvas-card h3{color:var(--acp-ink)}.acp-canvas-card p,.acp-canvas-card pre{color:var(--acp-ink-muted)}",
+    "#acp-pop.acp-approval-pop{left:auto;right:8px;bottom:52px;width:296px;max-width:calc(100% - 16px);padding:0;background:var(--acp-surface);border-color:var(--acp-border);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.14);overflow:hidden}",
+    ".acp-approval-title{padding:10px 12px 8px;font-size:11px;letter-spacing:.01em;color:var(--acp-ink-muted);border-color:var(--acp-border)}.acp-approval-option{grid-template-columns:18px 1fr 16px!important;gap:7px!important;padding:8px 11px!important;color:var(--acp-ink)!important}.acp-approval-option:hover{background:var(--acp-surface-muted)!important}.acp-approval-option .icon{font-size:14px;line-height:17px;color:var(--acp-ink-muted)}.acp-approval-option .label{font-size:12px;line-height:17px;color:var(--acp-ink)}.acp-approval-option .desc{margin-top:1px;font-size:10.5px;line-height:14px;color:var(--acp-ink-muted)}.acp-approval-option .check{font-size:13px;color:var(--acp-accent)}.acp-approval-option.danger .label{color:var(--acp-danger)}.acp-approval-option.danger .desc{color:var(--acp-danger)}",
+    ".acp-ap{background:var(--acp-surface-muted);border-color:var(--outline-amber-6,var(--acp-border));color:var(--ink-amber-10,var(--acp-ink-muted))}.acp-ap button{background:var(--acp-accent)}",
+    ".acp-suggestion{color:var(--acp-ink-muted)}.acp-suggestion:hover{background:var(--acp-surface-muted);color:var(--acp-ink)}.acp-welcome h2{color:var(--acp-ink)}.acp-welcome p{color:var(--acp-ink-muted)}",
+    "#acp-fab{background:var(--acp-ink);color:var(--acp-surface);border-color:var(--acp-border)}#acp-fab:hover{background:var(--acp-ink-muted)}",
+    ".acp-effort-current{color:var(--acp-accent)}.acp-effort-model{color:var(--acp-ink-muted)}.acp-effort-reset{color:var(--acp-ink-muted)!important}",
+    ".acp-composer{background:var(--acp-surface);border-color:var(--acp-border)}#acp-pop.acp-effort-pop{background:var(--acp-surface);border-color:var(--acp-border)}.acp-effort-range input::-webkit-slider-runnable-track{background:linear-gradient(90deg,var(--acp-accent) var(--effort-fill,78%),var(--acp-surface-raised) var(--effort-fill,78%))}.acp-effort-range input::-moz-range-track{background:var(--acp-surface-raised)}.acp-effort-range input::-moz-range-progress{background:var(--acp-accent)}",
   ].join("\n");
   var host = document.createElement("div");
   host.id = "acp-host";
@@ -234,6 +255,26 @@
     '<div class="acp-fright"><button id="acp-auto" title="Độ suy luận của model" type="button">Select effort <span class="chev">⌄</span></button>' +
     '<button id="acp-send" title="Gửi" aria-label="Gửi" type="button">↑</button></div></div></div></div>';
   document.body.appendChild(host);
+  function detectLmsTheme() {
+    var value = "";
+    try { value = document.documentElement.getAttribute("data-theme") || ""; } catch (e) { /* ignore */ }
+    if (value === "dark" || value === "light") return value;
+    try {
+      var preference = localStorage.getItem("themePreference") || localStorage.getItem("theme");
+      if (preference === "dark" || preference === "light") return preference;
+    } catch (e) { /* storage unavailable */ }
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function syncLmsTheme() {
+    host.setAttribute("data-theme", detectLmsTheme());
+  }
+  syncLmsTheme();
+  try {
+    if (window.__acp_theme_observer) window.__acp_theme_observer.disconnect();
+    window.__acp_theme_observer = new MutationObserver(syncLmsTheme);
+    window.__acp_theme_observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncLmsTheme);
+  } catch (e) { /* theme observation unavailable */ }
   root.appendChild(fab);
   root.appendChild(side);
   var canvas = document.createElement("div");
