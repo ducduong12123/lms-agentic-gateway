@@ -66,7 +66,6 @@ POLICY: dict[str, list[str]] = {
         "get_course_outline",
         "get_lesson_context",
         "get_batch_progress",
-        "find_at_risk_students",
         "list_at_risk_students",
         "get_student_mastery",
         "update_course_content_after_approval",

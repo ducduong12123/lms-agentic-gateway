@@ -5,12 +5,13 @@ import json
 import time
 import unicodedata
 
-from . import features
+from . import features, runs
 from .actions import record_action
 from .approval import audit, request_approval
 from .learner import concepts_for_lesson, format_learner_block, weak_concepts
 from .policy import allowed_tools
 from .long_memory import format_memories_block
+from .tool_bundles import plan_request, summary_for_tools
 from ..tools.envelope import action_result
 from .trace import trace as _trace
 
@@ -109,6 +110,36 @@ def learner_context_for_prompt(
     return {"learner_states": weak, "lesson_concepts": lesson_concepts}
 
 
+def _plan_block(context: dict) -> str:
+    plan = context.get("_plan") or {}
+    if not isinstance(plan, dict) or not plan:
+        return ""
+    return (
+        "Kế hoạch thực thi đã được định tuyến. Chỉ dùng các bundle và bước sau; tự lấy dữ liệu "
+        "bằng read tool trước khi hỏi lại. Không tiết lộ chain-of-thought nội bộ:\\n"
+        + json.dumps(plan, ensure_ascii=False)
+    )
+
+
+def _prepare_run(context: dict, user_msg: str, role: str) -> dict:
+    plan = plan_request(
+        user_msg,
+        role,
+        context.get("route") if isinstance(context.get("route"), dict) else {},
+        context.get("workflow_state") if isinstance(context.get("workflow_state"), dict) else {},
+    )
+    member = str(context.get("user") or "")
+    session_id = str(context.get("session_id") or "")
+    if member and member != "Guest" and session_id:
+        run = runs.start_or_resume(member, session_id, plan)
+        context["_run_id"] = str(run.get("id") or "")
+        stored = run.get("plan")
+        if isinstance(stored, dict) and stored:
+            plan = stored
+    context["_plan"] = plan
+    return plan
+
+
 def _initial_messages(system: str, user_msg: str, context: dict) -> list[dict]:
     """Build the prompt with bounded recent context, never allowing it to replace system rules."""
     messages: list[dict] = [{"role": "system", "content": system}]
@@ -127,6 +158,9 @@ def _initial_messages(system: str, user_msg: str, context: dict) -> list[dict]:
     workflow = _workflow_block(context)
     if workflow:
         messages.append({"role": "system", "content": workflow})
+    plan = _plan_block(context)
+    if plan:
+        messages.append({"role": "system", "content": plan})
     mode_instruction = str(context.get("mode_instruction") or "").strip()
     if mode_instruction:
         messages.append({"role": "system", "content": mode_instruction})
@@ -280,10 +314,14 @@ def _run_tool(registry, allowed: list, role: str, name: str, args: dict, context
         args["member"] = context["user"]
     args["_role"] = role
     tool = registry.get(name)
+    run_id = str(context.get("_run_id") or "")
+    step_id = ""
     if not tool or name not in allowed:
         out = {"error": f"tool '{name}' khong duoc phep cho role '{role}'"}
         _track_output(context, name, out, args)
         return out, None
+    if run_id:
+        step_id = runs.start_step(run_id, tool.description, name, args)
     if tool.needs_approval and (
         role not in tool.approval_roles
         or _requires_approval(name, args, str(context.get("approval_mode") or "ask"))
@@ -304,6 +342,12 @@ def _run_tool(registry, allowed: list, role: str, name: str, args: dict, context
         out["needs_approval"] = True
         out["approval_id"] = aid
         _track_output(context, name, out, args)
+        if step_id:
+            runs.finish_step(step_id, out, "waiting_approval", aid)
+            context["_last_plan_step"] = {
+                "id": step_id, "tool": name, "label": tool.description,
+                "status": "waiting_approval",
+            }
         draft_id = str(args.get("draft_id") or "")
         if name == "publish_lesson_draft" and draft_id and context.get("user"):
             features.mark_lesson_draft_status(str(context["user"]), draft_id, "pending_approval")
@@ -320,6 +364,12 @@ def _run_tool(registry, allowed: list, role: str, name: str, args: dict, context
         out = tool.func(args)
     except Exception as e:  # noqa: BLE001 - tra loi ve cho LLM
         out = {"error": str(e)}
+    if step_id:
+        status = "failed" if isinstance(out, dict) and out.get("error") else "completed"
+        runs.finish_step(step_id, out, status)
+        context["_last_plan_step"] = {
+            "id": step_id, "tool": name, "label": tool.description, "status": status,
+        }
     _track_output(context, name, out, args)
     return out, None
 
@@ -345,6 +395,10 @@ def _model_error_message(exc: Exception) -> str:
         return "Mô hình AI hiện tạm thời hết hạn mức hoặc chưa sẵn sàng. Vui lòng thử lại sau."
     return "Mô hình AI hiện không phản hồi. Vui lòng thử lại sau."
 def _agent_result(answer: str, tool_calls: list, approvals: list, timings: dict, context: dict) -> dict:
+    tool_names = [str(item.get("tool") or "") for item in tool_calls if isinstance(item, dict)]
+    run_id = str(context.get("_run_id") or "")
+    if run_id and not approvals:
+        runs.complete_run(run_id)
     return {
         "answer": answer,
         "tool_calls": tool_calls,
@@ -352,6 +406,9 @@ def _agent_result(answer: str, tool_calls: list, approvals: list, timings: dict,
         "actions": list(context.get("_actions") or []),
         "directives": list(context.get("_directives") or []),
         "timings": timings,
+        "run_id": run_id,
+        "plan": context.get("_plan") or {},
+        "reasoning_summary": summary_for_tools(tool_names),
     }
 
 
@@ -478,7 +535,8 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
     timings: dict = {"ttft_ms": None, "llm_ms": 0, "tools_ms": 0}
     context = context or {}
     allowed = allowed_tools(role)
-    schemas = registry.schemas(allowed)
+    plan = _prepare_run(context, user_msg, role)
+    schemas = registry.schemas(allowed, set(plan.get("bundles") or []))
 
     system = (
         "Bạn là gia sư LMS biết từng người học. Chỉ dùng tool được cấp. "
@@ -600,22 +658,16 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
 
 
 def run_agent_stream(client, registry, role: str, user_msg: str, context: dict | None = None, effort: str = "auto"):
-    """Generator SSE event. Moi vong LLM: token/thought -> round(tool). Cuoi: done.
+    """Stream answer, concise Vietnamese execution summaries, plan progress, and tool results.
 
-    Event:
-      {"t": "thought", "text": str}
-      {"t": "token", "text": str}
-      {"t": "tool", "tool": str, "ms": int}
-      {"t": "action", "card": dict}
-      {"t": "client", "directive": dict}
-      {"t": "done", "answer": str, "tool_calls": [...], "approvals": [...],
-       "actions": [...], "directives": [...], "timings": {...}}
+    Provider reasoning deltas are deliberately never exposed to the client.
     """
     t0 = time.perf_counter()
     timings: dict = {"ttft_ms": None, "llm_ms": 0, "tools_ms": 0}
     context = context or {}
     allowed = allowed_tools(role)
-    schemas = registry.schemas(allowed)
+    plan = _prepare_run(context, user_msg, role)
+    schemas = registry.schemas(allowed, set(plan.get("bundles") or []))
     system = (
         "Bạn là gia sư LMS biết từng người học. Chỉ dùng tool được cấp. "
         "Mọi câu trả lời về khóa học phải kèm nguồn dạng `LMS Course: <tên>, Course Lesson: <tên>`. "
@@ -645,6 +697,8 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
     tool_calls_log: list = []
     approvals: list = []
     answer = ""
+    yield {"t": "plan", "run_id": str(context.get("_run_id") or ""), "plan": plan}
+    yield {"t": "summary", "text": summary_for_tools([])}
     publish = _preflight_publish(registry, allowed, role, user_msg, context)
     if publish:
         yield {"t": "round", "n": 1}
@@ -661,11 +715,18 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
             yield {
                 "t": "tool", "tool": call["tool"], "ms": call["ms"], "result": preview,
             }
+            step = context.pop("_last_plan_step", None)
+            if step:
+                yield {"t": "plan_step", "step": step}
         for special in context.pop("_last_special", []):
             yield special
         if publish["approval"]:
             approvals.append(publish["approval"])
         timings["total_ms"] = int((time.perf_counter() - t0) * 1000)
+        reasoning_summary = summary_for_tools(
+            [str(item.get("tool") or "") for item in tool_calls_log],
+        )
+        yield {"t": "summary", "text": reasoning_summary}
         yield {
             "t": "done",
             "answer": "Bản nháp đã sẵn sàng. Hãy bấm “Duyệt & chạy” để lưu vào LMS.",
@@ -674,6 +735,9 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
             "actions": list(context.get("_actions") or []),
             "directives": list(context.get("_directives") or []),
             "timings": timings,
+            "run_id": str(context.get("_run_id") or ""),
+            "plan": plan,
+            "reasoning_summary": reasoning_summary,
         }
         return
     preflight = _preflight_risk(registry, allowed, role, user_msg, context)
@@ -711,6 +775,9 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
         if preflight and rnd == 0:
             preview = json.dumps(preflight["result"], ensure_ascii=False, default=str)[:400]
             yield {"t": "tool", "tool": preflight["name"], "ms": preflight["ms"], "result": preview}
+            step = context.pop("_last_plan_step", None)
+            if step:
+                yield {"t": "plan_step", "step": step}
             for special in context.pop("_last_special", []):
                 yield special
         t_llm = time.perf_counter()
@@ -722,7 +789,7 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
                         timings["ttft_ms"] = int((time.perf_counter() - t0) * 1000)
                     yield {"t": "token", "text": ev["text"]}
                 elif ev["type"] == "thought":
-                    yield {"t": "thought", "text": ev["text"]}
+                    continue
                 elif ev["type"] == "message":
                     streamed_msg = ev
         except Exception as stream_exc:  # noqa: BLE001 - stream hong thi fallback non-stream
@@ -740,13 +807,11 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
                 "thought": None,
                 "finish_reason": None,
             }
-            yield {"t": "thought", "text": f"(stream loi, dung che do thuong: {stream_exc})"}
+            yield {"t": "summary", "text": "Luồng trực tiếp bị gián đoạn; hệ thống đã chuyển sang chế độ xử lý thường."}
         timings["llm_ms"] += int((time.perf_counter() - t_llm) * 1000)
         if timings["ttft_ms"] is None:
             timings["ttft_ms"] = int((time.perf_counter() - t0) * 1000)
         msg: dict = dict((streamed_msg or {}).get("message") or {})
-        if (streamed_msg or {}).get("thought"):
-            yield {"t": "thought", "text": ""}
         messages.append({"role": "assistant", "content": msg.get("content"), "tool_calls": msg.get("tool_calls")})
 
         calls = msg.get("tool_calls") or []
@@ -774,9 +839,18 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
             except Exception:
                 preview = str(out)[:400]
             yield {"t": "tool", "tool": name, "ms": ms, "result": preview}
+            step = context.pop("_last_plan_step", None)
+            if step:
+                yield {"t": "plan_step", "step": step}
             for special in context.pop("_last_special", []):
                 yield special
         timings["tools_ms"] += int((time.perf_counter() - t_tools) * 1000)
+        yield {
+            "t": "summary",
+            "text": summary_for_tools(
+                [str(item.get("tool") or "") for item in tool_calls_log],
+            ),
+        }
 
         if approvals:
             answer = "Thao tác cần phê duyệt trước khi thực hiện."
@@ -785,6 +859,12 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
         answer = "Tôi đã tra cứu nhưng chưa đủ dữ liệu, bạn hỏi cụ thể hơn nhé."
 
     timings["total_ms"] = int((time.perf_counter() - t0) * 1000)
+    run_id = str(context.get("_run_id") or "")
+    if run_id and not approvals:
+        runs.complete_run(run_id)
+    reasoning_summary = summary_for_tools(
+        [str(item.get("tool") or "") for item in tool_calls_log],
+    )
     yield {
         "t": "done",
         "answer": answer,
@@ -793,4 +873,7 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
         "actions": list(context.get("_actions") or []),
         "directives": list(context.get("_directives") or []),
         "timings": timings,
+        "run_id": run_id,
+        "plan": plan,
+        "reasoning_summary": reasoning_summary,
     }

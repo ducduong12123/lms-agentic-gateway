@@ -19,7 +19,7 @@ from gateway.api.webhook import handle_event, verify_signature
 from gateway.config import settings
 from gateway.connector.frappe_client import FrappeClient
 from gateway.runtime.agent_loop import learner_context_for_prompt, run_agent, run_agent_stream
-from gateway.runtime import actions
+from gateway.runtime import actions, runs
 from gateway.runtime.approval import mark_executed, pending_for
 from gateway.runtime.approval import approve as claim_approval
 from gateway.runtime.events import EventProcessor
@@ -598,6 +598,7 @@ def approve_action(
                 action_id=str(result.get("action_id") or ""),
             )
     mark_executed(approval_id, result)
+    resumed = runs.complete_approval(approval_id, result)
     draft_id = str(args.get("draft_id") or "")
     if draft_id:
         draft = features.get_lesson_draft(identity.user, draft_id)
@@ -607,7 +608,14 @@ def approve_action(
             features.update_conversation_state(
                 identity.user, str(draft["session_id"]), {"pending_approval_id": ""},
             )
-    return {"ok": "error" not in result, "tool": record["tool"], "result": result}
+    return {
+        "ok": "error" not in result,
+        "tool": record["tool"],
+        "result": result,
+        "run_id": str((resumed or {}).get("id") or ""),
+        "resume": bool(resumed) and "error" not in result,
+        "resume_message": "Tiếp tục kế hoạch sau khi thao tác vừa được duyệt.",
+    }
 
 
 @app.post("/webhook/frappe")

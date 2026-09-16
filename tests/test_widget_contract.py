@@ -41,6 +41,11 @@ def test_widget_does_not_claim_identity():
     assert "overflow-x:hidden" in source
     assert "function syncEffortButton(label)" in source
     assert "syncEffortButton(EFFORT_LEVELS[effortIndex()].label)" in source
+    assert 'ev.t === "summary"' in source
+    assert 'ev.t === "plan"' in source
+    assert 'ev.t === "plan_step"' in source
+    assert 'ev.t === "thought"' not in source
+    assert "Tóm tắt quá trình thực hiện" in source
     assert 'id="acp-queue"' not in source
     assert "refreshQueue" not in source
     assert "acp-fab-badge" not in source

@@ -134,6 +134,7 @@
     "color:#8a8a8a;font-size:12.5px}",
     ".acp-toolrow .tick{color:#4caf7d;font-size:13px}",
     ".acp-toolrow .tname{color:#c9c9c9;font-size:12.5px}",
+    ".acp-summary-text{margin:0 0 7px;color:var(--acp-ink-muted);font-size:12.5px;line-height:1.55}.acp-plan{display:flex;flex-direction:column;gap:4px;margin:2px 0 8px}.acp-plan-row{display:flex;align-items:center;gap:7px;color:var(--acp-ink-muted);font-size:11.5px}.acp-plan-dot{width:6px;height:6px;border-radius:50%;background:var(--acp-border-strong);flex:0 0 auto}.acp-plan-row.running .acp-plan-dot{background:var(--acp-accent)}.acp-plan-row.completed .acp-plan-dot{background:var(--surface-green-6,#22a06b)}.acp-plan-row.waiting_approval .acp-plan-dot{background:var(--surface-amber-6,#d99a00)}",
     "#acp-insight{margin:10px 14px 0;padding:11px 12px;border:1px solid #285247;background:#142720;border-radius:9px;color:#d9eee7;font-size:12px;line-height:1.45}",
     "#acp-insight[hidden]{display:none}#acp-insight b{color:#fff}#acp-insight button{margin:8px 6px 0 0;border:1px solid #3c665b;background:transparent;color:#bfe2d6;border-radius:7px;padding:5px 8px;cursor:pointer}",
     ".acp-ap{margin-top:10px;border:1px solid #554507;background:#221d0c;border-radius:8px;padding:10px;color:#e7c96f;font-size:12.5px}",
@@ -766,6 +767,7 @@
         btn.textContent = "Đã duyệt";
         if (j.result && j.result.kind === "action") addAssistant("", [], [], null, [j.result], j.result.directives || []);
         else addAssistant("Đã thực hiện sau phê duyệt: " + JSON.stringify(j.result).slice(0, 800), [], []);
+        if (j.resume && j.resume_message) setTimeout(function () { send(j.resume_message, true); }, 120);
       })
       .catch(function (err) {
         var message = String(err && err.message || "Không rõ lỗi").replace(/\s+/g, " ").slice(0, 180);
@@ -774,14 +776,14 @@
         btn.disabled = !retryable;
       });
   }
-  function send(text) {
+  function send(text, silent) {
     text = (text || input.value || "").trim();
     if (!text) return;
     input.value = "";
     input.style.height = "auto";
     syncSend();
     if (msgs.querySelector(".acp-welcome")) titleEl.textContent = text.length > 28 ? text.slice(0, 28) + "…" : text;
-    addUser(text);
+    if (!silent) addUser(text);
     var t0 = Date.now();
     fetch(GATEWAY + "/chat/stream", {
       method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
@@ -817,11 +819,12 @@
     function onEvent(ev) {
       if (ev.t === "session" && ev.session_id) { setConversation(ev.session_id); loadHistory(); return; }
       if (ev.t === "token") { full += ev.text || ""; paint(); }
-      else if (ev.t === "thought") { pushThought(ev.text || ""); }
+      else if (ev.t === "summary") { pushSummary(ev.text || ""); }
+      else if (ev.t === "plan") { pushPlan(ev.plan || {}); }
+      else if (ev.t === "plan_step") { pushPlanStep(ev.step || {}); }
       else if (ev.t === "tool") { pushTool(ev); }
       else if (ev.t === "action") { appendActionCard(box, ev.card); }
       else if (ev.t === "client") { box.dataset.directiveSeen = "1"; handleDirective(ev); }
-      else if (ev.t === "round" && ev.n > 1 && full) { full += "\n\n— vòng " + ev.n + " —\n"; paint(); }
       else if (ev.t === "done") {
         if (ev.session_id) setConversation(ev.session_id);
         finishBox(ev); loadHistory();
@@ -833,53 +836,57 @@
       el = document.createElement("details");
       el.className = "acp-think";
       el.open = true;
-      el.innerHTML = '<summary><span class="th-spin"></span><span class="th-label">Thinking…</span></summary><div class="th-body"></div>';
+      el.innerHTML = '<summary><span class="th-spin"></span><span class="th-label">Đang thực hiện kế hoạch…</span></summary><div class="th-body"><p class="acp-summary-text"></p><div class="acp-plan"></div></div>';
       box.insertBefore(el, bodyEl);
       return el;
     }
     var TOOL_VI = {
-      search_courses: "Tìm khóa học",
-      get_course_outline: "Lấy đề cương khóa học",
-      get_lesson_context: "Đọc nội dung bài học",
-      get_my_progress: "Xem tiến độ học",
-      get_batch_progress: "Xem tiến độ lớp học",
-      find_at_risk_students: "Tìm học viên cần hỗ trợ",
-      list_at_risk_students: "Liệt kê học viên nguy cơ",
-      get_student_mastery: "Xem điểm yếu học viên",
-      get_quiz_submissions: "Xem bài nộp quiz",
-      get_assignment_submissions: "Xem bài nộp tự luận",
-      draft_quiz: "Soạn quiz nháp",
-      draft_assignment_feedback: "Soạn nhận xét nháp",
-      update_course_content_after_approval: "Cập nhật bài học",
-      remember_user_fact: "Ghi nhớ thông tin",
-      recall_user_facts: "Nhớ lại thông tin",
-      forget_user_fact: "Quên thông tin",
-      get_my_mastery: "Xem điểm yếu",
-      record_feedback_correction: "Ghi nhận góp ý",
-      enroll_course: "Ghi danh khóa học",
-      mark_lesson_complete: "Đánh dấu bài học hoàn tất",
-      save_note: "Lưu ghi chú",
-      create_review_set: "Tạo bộ ôn tập",
-      schedule_review: "Lên lịch ôn tập",
-      set_goal: "Cập nhật mục tiêu",
-      start_session: "Mở phiên học",
-      navigate: "Mở trang LMS",
-      render_view: "Mở khung Agentic",
-      message_students: "Nhắn học viên",
-      create_live_class: "Tạo lớp trực tiếp",
-      publish_lesson_draft: "Xuất bản bài học",
-      analyze_course_gaps: "Phân tích khoảng trống"
+      search_courses: "Tìm khóa học", get_course_outline: "Lấy đề cương khóa học",
+      get_lesson_context: "Đọc nội dung bài học", get_course_authoring_state: "Đọc trạng thái biên soạn",
+      get_my_progress: "Xem tiến độ học", get_batch_progress: "Xem tiến độ lớp học",
+      list_at_risk_students: "Liệt kê học viên nguy cơ", get_student_mastery: "Xem điểm yếu học viên",
+      get_quiz_submissions: "Xem bài nộp quiz", get_assignment_submissions: "Xem bài nộp tự luận",
+      draft_quiz: "Soạn quiz nháp", draft_assignment_feedback: "Soạn nhận xét nháp",
+      update_course_content_after_approval: "Cập nhật bài học", publish_lesson_draft: "Xuất bản bài học",
+      manage_course: "Quản lý khóa học", manage_chapter: "Quản lý chương", manage_lesson: "Quản lý bài học",
+      manage_lesson_block: "Quản lý khối nội dung", manage_quiz: "Quản lý quiz",
+      manage_assignment: "Quản lý assignment", manage_programming_exercise: "Quản lý bài lập trình",
+      remember_user_fact: "Ghi nhớ thông tin", recall_user_facts: "Nhớ lại thông tin",
+      forget_user_fact: "Quên thông tin", get_my_mastery: "Xem điểm yếu",
+      record_feedback_correction: "Ghi nhận góp ý", enroll_course: "Ghi danh khóa học",
+      mark_lesson_complete: "Đánh dấu bài học hoàn tất", save_note: "Lưu ghi chú",
+      create_review_set: "Tạo bộ ôn tập", schedule_review: "Lên lịch ôn tập",
+      set_goal: "Cập nhật mục tiêu", start_session: "Mở phiên học", navigate: "Mở trang LMS",
+      render_view: "Mở khung Agentic", message_students: "Nhắn học viên",
+      create_live_class: "Tạo lớp trực tiếp", analyze_course_gaps: "Phân tích khoảng trống"
     };
     function toolVi(name) { return TOOL_VI[name] || name; }
-    function pushThought(text) {
+    function pushSummary(text) {
       if (!text) return;
       var el = thinkBox();
-      var body = el.querySelector(".th-body");
-      var buf = body.querySelector(".th-stream");
-      if (!buf) { buf = document.createElement("div"); buf.className = "th-stream"; body.insertBefore(buf, body.firstChild); }
-      buf.dataset.raw = (buf.dataset.raw || "") + (buf.dataset.raw ? "\n" : "") + text;
-      buf.innerHTML = md(buf.dataset.raw);
+      var summary = el.querySelector(".acp-summary-text");
+      summary.textContent = text;
       msgs.scrollTop = msgs.scrollHeight;
+    }
+    function pushPlan(plan) {
+      var el = thinkBox(), holder = el.querySelector(".acp-plan");
+      holder.innerHTML = "";
+      (plan.steps || []).forEach(function (step) {
+        var row = document.createElement("div");
+        row.className = "acp-plan-row " + (step.status || "pending");
+        row.dataset.stepId = step.id || "";
+        row.innerHTML = '<span class="acp-plan-dot"></span><span>' + esc(step.label || step.id || "Bước xử lý") + "</span>";
+        holder.appendChild(row);
+      });
+    }
+    function pushPlanStep(step) {
+      var el = thinkBox(), holder = el.querySelector(".acp-plan");
+      var pending = holder.querySelector(".acp-plan-row.pending");
+      if (pending) pending.className = "acp-plan-row " + (step.status || "completed");
+      var row = document.createElement("div");
+      row.className = "acp-plan-row " + (step.status || "completed");
+      row.innerHTML = '<span class="acp-plan-dot"></span><span>' + esc(toolVi(step.tool || "") || step.label || "Đã xử lý") + "</span>";
+      holder.appendChild(row);
     }
     function pushTool(ev) {
       var el = thinkBox();
@@ -899,9 +906,12 @@
       var el = box.querySelector(".acp-think");
       if (!el) return;
       el.classList.add("done");
+      el.querySelectorAll(".acp-plan-row.pending").forEach(function (row) {
+        row.className = "acp-plan-row completed";
+      });
       el.open = false;
       var label = el.querySelector(".th-label");
-      if (label) label.textContent = "Đã suy nghĩ xong";
+      if (label) label.textContent = "Tóm tắt quá trình thực hiện";
       if (!el.querySelector(".th-body").children.length && !el.querySelector(".th-body").textContent.trim()) el.remove();
     }
     function finishBox(ev) {

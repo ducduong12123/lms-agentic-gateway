@@ -8,6 +8,7 @@ from ..runtime.long_memory import add_memory as _add_memory
 from ..runtime.long_memory import forget_memory as _forget_memory
 from ..runtime.long_memory import search_memories as _search_memories
 from ..runtime.tool_registry import Tool, ToolRegistry
+from ..runtime.tool_bundles import configure_registry
 from .verbs_student import register as register_student_verbs
 from .verbs_client import register as register_client_verbs
 from .verbs_teacher import register as register_teacher_verbs
@@ -84,15 +85,6 @@ def build_registry(frappe: FrappeClient, llm=None) -> ToolRegistry:
         return frappe.list_documents("LMS Batch Enrollment", filters={"batch": a["batch"]}, fields=["member", "course"], limit=100)
 
     reg.register(Tool("get_batch_progress", "Thống kê batch (teacher/admin).", {"type": "object", "properties": {"batch": {"type": "string"}}, "required": ["batch"]}, get_batch_progress))
-
-    # ---------- 6. find_at_risk_students ----------
-    def find_at_risk_students(a: dict):
-        if _mock(frappe):
-            return {"at_risk": [{"member": "hv1@test.com", "progress": 10}]}
-        rows = frappe.list_documents("LMS Enrollment", filters={"course": a["course"]}, fields=["member", "progress"], limit=200).get("data", [])
-        th = int(a.get("threshold", 30))
-        return {"at_risk": [r for r in rows if (r.get("progress") or 0) < th]}
-
 
     # ---------- 6b. list_at_risk_students (ITS engine, teacher/admin) ----------
     def list_at_risk_students(a: dict):
@@ -268,4 +260,5 @@ def build_registry(frappe: FrappeClient, llm=None) -> ToolRegistry:
     register_course_authoring_verbs(reg, frappe)
     register_client_verbs(reg)
     register_student_verbs(reg, frappe, llm)
+    configure_registry(reg)
     return reg

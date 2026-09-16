@@ -207,3 +207,61 @@ def test_approval_modes_gate_only_the_requested_risk(monkeypatch):
     assert auto_result == full_result == {"ok": True}
     assert auto_approval is full_approval is None
     assert [item["operation"] for item in executions] == ["update", "delete"]
+
+
+class AmbiguousWorkflowClient:
+    def __init__(self):
+        self.calls = 0
+        self.schema_names = set()
+
+    def chat(self, messages, tools=None, effort="auto"):
+        self.calls += 1
+        self.schema_names = {
+            schema["function"]["name"] for schema in (tools or [])
+        }
+        if self.calls == 1:
+            return {
+                "choices": [{
+                    "message": {
+                        "content": None,
+                        "tool_calls": [{
+                            "id": "course",
+                            "type": "function",
+                            "function": {
+                                "name": "search_courses",
+                                "arguments": "{\"query\":\"Python\"}",
+                            },
+                        }],
+                    }
+                }]
+            }
+        return {"choices": [{"message": {"content": "Đã phân tích khóa học và nhóm học viên yếu."}}]}
+
+
+def test_ambiguous_teacher_request_routes_and_executes_multiple_domains():
+    registry = ToolRegistry()
+    registry.register(Tool(
+        "search_courses", "search", {"type": "object"}, lambda args: {"courses": ["PY-101"]},
+        bundles={"course.read"},
+    ))
+    registry.register(Tool(
+        "list_at_risk_students", "risk", {"type": "object"}, lambda args: {"students": ["weak@test.com"]},
+        bundles={"analytics.learning"},
+    ))
+    client = AmbiguousWorkflowClient()
+
+    result = agent_loop.run_agent(
+        client,
+        registry,
+        "teacher",
+        "Phân tích học viên yếu rồi cải thiện course Python",
+        {"user": "teacher@test.com", "route": {"kind": "course", "course": "PY-101"}},
+    )
+
+    assert client.schema_names == {"search_courses", "list_at_risk_students"}
+    assert [call["tool"] for call in result["tool_calls"]] == [
+        "list_at_risk_students", "search_courses",
+    ]
+    assert result["plan"]["bundles"] == [
+        "course.read", "course.authoring", "analytics.learning",
+    ]

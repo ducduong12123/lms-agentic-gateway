@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from gateway.connector.frappe_client import FrappeClient
 from gateway.runtime.policy import allowed_tools
 from gateway.tools.catalog import build_registry
+from gateway.runtime.tool_bundles import select_bundles
 
 reg = build_registry(FrappeClient("http://localhost"))
 names = reg.names()
@@ -22,4 +23,22 @@ assert "search_courses" in allowed_tools("student")
 assert "update_course_content_after_approval" not in allowed_tools("student")
 # student-safe: tool lesson phải tồn tại và có mô tả lọc instructor
 assert "instructor" in reg.get("get_lesson_context").description
+
+
+def test_bundle_router_limits_teacher_tools_to_relevant_domains():
+    registry = build_registry(FrappeClient("http://localhost"))
+    bundles = select_bundles(
+        "Phân tích học viên yếu rồi cải thiện course Python",
+        "teacher",
+        {"kind": "course", "course": "PY-101"},
+    )
+    schemas = registry.schemas(allowed_tools("teacher"), set(bundles))
+    names = {item["function"]["name"] for item in schemas}
+    assert {"course.read", "course.authoring", "analytics.learning"} <= set(bundles)
+    assert "manage_lesson" in names
+    assert "list_at_risk_students" in names
+    assert "get_course_outline" in names
+    assert "remember_user_fact" not in names
+    assert all(registry.get(name).bundles for name in registry.names())
+    assert select_bundles("Tên tôi là An, hãy ghi nhớ", "student") == ["memory.personal"]
 print("OK tools:", names)

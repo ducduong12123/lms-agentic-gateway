@@ -37,6 +37,32 @@ class FakeActionStreamingClient:
         else:
             yield {"type": "message", "message": {"content": "Đã xong.", "tool_calls": []}}
 
+
+class ThoughtStreamingClient:
+    def chat_stream(self, messages, tools=None):
+        yield {"type": "thought", "text": "RAW_PRIVATE_REASONING"}
+        yield {"type": "token", "text": "Câu trả lời."}
+        yield {"type": "message", "message": {"content": "Câu trả lời.", "tool_calls": []}}
+
+
+def test_stream_replaces_raw_reasoning_with_vietnamese_summary():
+    events = list(
+        run_agent_stream(
+            ThoughtStreamingClient(),
+            ToolRegistry(),
+            "student",
+            "xin chào",
+            {"user": "student@example.com"},
+        )
+    )
+
+    assert not any(event["t"] == "thought" for event in events)
+    assert any(event["t"] == "plan" for event in events)
+    summaries = [event["text"] for event in events if event["t"] == "summary"]
+    assert summaries
+    assert all("RAW_PRIVATE_REASONING" not in text for text in summaries)
+    assert events[-1]["reasoning_summary"]
+
 def test_stream_yields_client_directive_before_done():
     registry = ToolRegistry()
     register(registry)
