@@ -1074,9 +1074,13 @@
     range.style.setProperty("--effort-fill", (index / (EFFORT_LEVELS.length - 1) * 100) + "%");
     range.setAttribute("aria-valuetext", EFFORT_LEVELS[index].label);
   }
+  function syncEffortButton(label) {
+    effortBtn.innerHTML = label + ' <span class="chev">' + svgIcon("chevronDown") + '</span>';
+    effortBtn.title = "Độ suy luận: " + label;
+  }
   function setEffort(value, label) {
     CURRENT_EFFORT = value;
-    effortBtn.title = "Độ suy luận: " + label;
+    syncEffortButton(label);
     renderEffortCard();
   }
   modeBtn.onclick = function (e) {
@@ -1154,6 +1158,7 @@
     .catch(function () { CURRENT_IDENTITY = { user: "Guest", role: "student", roles: [] }; syncUiChrome(); });
   syncUiChrome();
   syncApprovalButton();
+  syncEffortButton(EFFORT_LEVELS[effortIndex()].label);
   syncSend();
   if (!msgs.children.length) addWelcome();
   try {

@@ -39,6 +39,8 @@ def test_widget_does_not_claim_identity():
     assert "acp-auto" not in source
     assert 'setEffort("auto"' not in source
     assert "overflow-x:hidden" in source
+    assert "function syncEffortButton(label)" in source
+    assert "syncEffortButton(EFFORT_LEVELS[effortIndex()].label)" in source
     assert 'id="acp-queue"' not in source
     assert "refreshQueue" not in source
     assert "acp-fab-badge" not in source
