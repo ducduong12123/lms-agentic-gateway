@@ -4,6 +4,7 @@ from __future__ import annotations
 from ..connector.frappe_client import FrappeClient
 from ..runtime import learner as _learner
 from ..runtime import features as _features
+from ..runtime import course_projects as _course_projects
 from ..runtime.long_memory import add_memory as _add_memory
 from ..runtime.long_memory import forget_memory as _forget_memory
 from ..runtime.long_memory import search_memories as _search_memories
@@ -255,6 +256,82 @@ def build_registry(frappe: FrappeClient, llm=None) -> ToolRegistry:
             "note": {"type": "string", "default": "not-accurate"},
         }, "required": ["concept_id"]},
         record_feedback_correction,
+    ))
+
+    # ---------- 16-18. durable course-authoring workspace ----------
+    def list_course_projects(a: dict):
+        return {
+            "projects": _course_projects.list_projects(
+                str(a.get("member") or ""), int(a.get("limit", 20) or 20),
+            )
+        }
+
+    reg.register(Tool(
+        "list_course_projects",
+        "Liệt kê các dự án biên soạn khóa học bền vững của giáo viên. Dùng để tiếp tục công việc từ một chat mới.",
+        {"type": "object", "properties": {
+            "limit": {"type": "integer", "default": 20},
+        }},
+        list_course_projects,
+    ))
+
+    def get_course_project(a: dict):
+        project_id = str(a.get("project_id") or "")
+        member = str(a.get("member") or "")
+        session_id = str(a.get("_session_id") or "")
+        if project_id:
+            return _course_projects.checkpoint_project(
+                member, session_id, project_id=project_id,
+            )
+        project = _course_projects.active_project(member, session_id)
+        return project or {"project": None}
+
+    reg.register(Tool(
+        "get_course_project",
+        "Đọc và kích hoạt checkpoint chuẩn của dự án khóa học: brief, đối tượng, chuẩn đầu ra, module, quyết định, phần đã xong và việc tiếp theo.",
+        {"type": "object", "properties": {
+            "project_id": {"type": "string", "description": "Bỏ trống để đọc dự án đang hoạt động"},
+        }},
+        get_course_project,
+    ))
+
+    def update_course_project(a: dict):
+        patch_fields = (
+            "brief", "audience", "learning_outcomes", "constraints", "module_plan",
+            "decisions", "completed_items", "next_actions", "current_focus",
+        )
+        patch = {key: a[key] for key in patch_fields if key in a}
+        return _course_projects.checkpoint_project(
+            str(a.get("member") or ""),
+            str(a.get("_session_id") or ""),
+            project_id=str(a.get("project_id") or ""),
+            title=str(a.get("title") or ""),
+            course=a.get("course") if "course" in a else None,
+            status=str(a.get("status") or "") or None,
+            patch=patch,
+            new_project=str(a.get("operation") or "") == "create",
+        )
+
+    reg.register(Tool(
+        "update_course_project",
+        "Tạo mới hoặc checkpoint dự án biên soạn dài hạn. Dùng operation=create khi bắt đầu khóa học khác; mọi trường không gửi được giữ nguyên và danh sách đã gửi thay thế bản cũ. Gọi trước khi bắt đầu và sau mỗi mốc hoàn thành.",
+        {"type": "object", "properties": {
+            "operation": {"type": "string", "enum": ["create", "checkpoint"], "default": "checkpoint"},
+            "project_id": {"type": "string"},
+            "title": {"type": "string"},
+            "course": {"type": "string", "description": "LMS Course name/id sau khi đã tạo"},
+            "status": {"type": "string", "enum": ["planning", "authoring", "review", "completed", "archived"]},
+            "brief": {"type": "string"},
+            "audience": {"type": "string"},
+            "learning_outcomes": {"type": "array", "items": {"type": "string"}},
+            "constraints": {"type": "array", "items": {"type": "string"}},
+            "module_plan": {"type": "array", "items": {"type": "object"}},
+            "decisions": {"type": "array", "items": {"type": "string"}},
+            "completed_items": {"type": "array", "items": {"type": "string"}},
+            "next_actions": {"type": "array", "items": {"type": "string"}},
+            "current_focus": {"type": "string"},
+        }},
+        update_course_project,
     ))
     register_teacher_verbs(reg, frappe)
     register_course_authoring_verbs(reg, frappe)

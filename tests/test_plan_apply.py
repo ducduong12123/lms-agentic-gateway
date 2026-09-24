@@ -10,11 +10,18 @@ from gateway.tools import plan_executors
 class FakeFrappe:
     def __init__(self):
         self.docs = {
+            "LMS Category": [{"name": "Artificial intelligence"}],
             "LMS Course": [{"name": "PY-101", "title": "Python", "modified": "v1"}],
             "LMS Quiz": [{"name": "QZ-1", "title": "Check", "passing_percentage": 50, "modified": "q1"}],
             "LMS Question": [],
         }
         self.writes = []
+
+    def list_documents(self, doctype, filters=None, fields=None, limit=20):
+        filters = filters or {}
+        rows = [row for row in self.docs.get(doctype, [])
+                if all(str(row.get(key)) == str(value) for key, value in filters.items())]
+        return {"data": [dict(row) for row in rows[:limit]]}
 
     def get_document(self, doctype, name):
         row = next((item for item in self.docs.get(doctype, []) if item.get("name") == name), {})
@@ -84,6 +91,21 @@ def test_expected_modified_mismatch_blocks_write():
         assert "đã thay đổi" in str(exc)
     else:
         raise AssertionError("stale plan should not apply")
+    assert frappe.writes == []
+
+
+def test_edited_course_plan_rejects_missing_category_before_write():
+    frappe = FakeFrappe()
+    plan = _plan(args={"operation": "create", "member": "teacher@example.com"}, expected_modified={})
+    merged = {"course": {"fields": {
+        "title": "T", "description": "D", "short_introduction": "S", "category": "Education",
+    }}}
+    try:
+        plan_executors.apply_manage_course_create(frappe, plan, merged)
+    except ValueError as exc:
+        assert "Education" in str(exc)
+    else:
+        raise AssertionError("edited category must be revalidated at apply time")
     assert frappe.writes == []
 
 
@@ -212,7 +234,7 @@ def test_create_plan_applies_without_double_write():
         "id": "plan_create",
         "tool": "manage_course",
         "status": "pending",
-        "args": {"operation": "create", "title": "New", "description": "D", "short_introduction": "S"},
+        "args": {"operation": "create", "title": "New", "description": "D", "short_introduction": "S", "member": "teacher@example.com"},
         "items": [{"id": "create-course", "status": "pending", "payload": {"fields": {"title": "New", "description": "D", "short_introduction": "S"}}}],
         "expected_modified": {},
         "reversibility": "compensating",
@@ -222,6 +244,68 @@ def test_create_plan_applies_without_double_write():
     assert result["status"] == "done"
     assert len(frappe.docs["LMS Course"]) == 2
     assert len(frappe.writes) == 1
+    assert frappe.writes[0][2]["instructors"] == [{"instructor": "teacher@example.com"}]
     assert result["undo"]["op"] == "delete"
     assert result["undo"]["doctype"] == "LMS Course"
     assert result["undo"]["name"] == "LMS Course-1"
+
+
+def test_additive_chapter_plan_preserves_changes_made_after_preview():
+    frappe = FakeFrappe()
+    frappe.docs["LMS Course"][0].update({
+        "modified": "v2",
+        "chapters": [{"chapter": "CH-EXISTING"}],
+    })
+    plan = {
+        "args": {"operation": "create", "course": "PY-101", "title": "New chapter"},
+        "expected_modified": {"LMS Course:PY-101": "v1"},
+    }
+    merged = {
+        "create-chapter": {
+            "fields": {"course": "PY-101", "title": "New chapter"},
+        }
+    }
+
+    result = plan_executors.apply_manage_chapter_create(frappe, plan, merged)
+
+    assert result["status"] == "done"
+    assert frappe.docs["LMS Course"][0]["chapters"] == [
+        {"chapter": "CH-EXISTING"},
+        {"chapter": "Course Chapter-1"},
+    ]
+
+
+def test_additive_lesson_plan_preserves_changes_made_after_preview():
+    frappe = FakeFrappe()
+    frappe.docs["Course Chapter"] = [{
+        "name": "CH-1",
+        "modified": "v2",
+        "lessons": [{"lesson": "LS-EXISTING"}],
+    }]
+    plan = {
+        "args": {
+            "operation": "create",
+            "course": "PY-101",
+            "chapter": "CH-1",
+            "title": "New lesson",
+        },
+        "expected_modified": {"Course Chapter:CH-1": "v1"},
+    }
+    merged = {
+        "create-lesson": {
+            "fields": {
+                "course": "PY-101",
+                "chapter": "CH-1",
+                "title": "New lesson",
+                "body": "Lesson content",
+            },
+        }
+    }
+
+    result = plan_executors.apply_manage_lesson_create(frappe, plan, merged)
+
+    assert result["status"] == "done"
+    assert frappe.docs["Course Chapter"][0]["lessons"] == [
+        {"lesson": "LS-EXISTING"},
+        {"lesson": "Course Lesson-1"},
+    ]

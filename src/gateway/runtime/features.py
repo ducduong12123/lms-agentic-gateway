@@ -552,7 +552,7 @@ def erase_member(member: str, path: Path | None = None) -> dict:
             ("member_pref", "member"), ("daily_plan", "member"), ("route_prompt", "member"),
             ("agent_action", "target"), ("long_memories", "user"), ("concept_feedback", "member"),
             ("conversation_state", "member"), ("lesson_draft", "member"),
-            ("chat_session", "member"),
+            ("course_project", "member"), ("chat_session", "member"),
         ):
             exists = conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
@@ -793,6 +793,10 @@ def workflow_context(
     draft = get_lesson_draft(member, draft_id, path) if draft_id else None
     if draft:
         state["active_draft"] = draft
+    from gateway.runtime.course_projects import active_project
+    project = active_project(member, session_id, path)
+    if project:
+        state["active_project"] = project
     return state
 
 

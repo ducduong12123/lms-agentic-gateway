@@ -5,7 +5,7 @@ import json
 import time
 import unicodedata
 
-from . import features, runs
+from . import course_projects, features, runs
 from .actions import record_action
 from .approval import audit, request_approval
 from .learner import concepts_for_lesson, format_learner_block, weak_concepts
@@ -67,11 +67,20 @@ def _workflow_block(context: dict) -> str:
     if not isinstance(state, dict) or not state:
         return ""
     active_draft = state.get("active_draft") or {}
+    active_project = state.get("active_project") or {}
+    project_state = active_project.get("state") if isinstance(active_project, dict) else {}
     payload = {
         "active_course": state.get("active_course"),
         "active_chapter": state.get("active_chapter"),
         "active_lesson": state.get("active_lesson"),
         "pending_approval_id": state.get("pending_approval_id"),
+        "active_project": {
+            "id": active_project.get("id"),
+            "title": active_project.get("title"),
+            "course": active_project.get("course"),
+            "status": active_project.get("status"),
+            "state": project_state if isinstance(project_state, dict) else {},
+        } if isinstance(active_project, dict) and active_project else None,
         "active_draft": {
             "id": active_draft.get("id"),
             "course": active_draft.get("course"),
@@ -83,9 +92,11 @@ def _workflow_block(context: dict) -> str:
         } if isinstance(active_draft, dict) and active_draft else None,
     }
     return (
-        "Trạng thái công việc bền vững của session (ưu tiên hơn ký ức semantic và không hỏi lại "
-        "các trường đã có). Khi người dùng yêu cầu lưu/xuất bản, dùng active_draft.id và các LMS ID "
-        "sau; không thay nội dung draft bằng chủ đề khác:\n"
+        "Trạng thái công việc bền vững của session (nguồn chuẩn, ưu tiên hơn ký ức semantic "
+        "và lịch sử chat). Không hỏi lại dữ liệu đã có. Với dự án nhiều module, luôn tiếp tục từ "
+        "active_project.state.next_actions/current_focus, cập nhật checkpoint sau mỗi mốc, và không "
+        "đánh dấu hoàn tất nếu LMS chưa có thay đổi tương ứng. Khi lưu/xuất bản bài, dùng active_draft.id "
+        "và các LMS ID sau; không thay nội dung draft bằng chủ đề khác:\n"
         + json.dumps(payload, ensure_ascii=False)
     )
 
@@ -205,7 +216,7 @@ def _capture_tool_workflow(context: dict, tool_name: str, args: dict, out: dict)
         rows = out.get("data") or []
         if isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict):
             changes["active_course"] = str(rows[0].get("name") or rows[0].get("title") or "")
-    elif tool_name == "get_course_outline":
+    elif tool_name in {"get_course_outline", "get_course_authoring_state"}:
         changes["active_course"] = str(out.get("course_id") or args.get("course") or "")
         chapters = out.get("chapters") or []
         current = str((context.get("workflow_state") or {}).get("active_chapter") or "")
@@ -232,6 +243,14 @@ def _capture_tool_workflow(context: dict, tool_name: str, args: dict, out: dict)
     changes = {key: value for key, value in changes.items() if value}
     if changes:
         state = features.update_conversation_state(member, session_id, changes)
+        active_project = course_projects.active_project(member, session_id)
+        if active_project and changes.get("active_course"):
+            course_projects.checkpoint_project(
+                member,
+                session_id,
+                project_id=str(active_project["id"]),
+                course=str(changes["active_course"]),
+            )
         draft_id = str(state.get("active_draft_id") or "")
         draft = features.get_lesson_draft(member, draft_id) if draft_id else None
         if draft and tool_name == "get_course_outline":
@@ -241,6 +260,13 @@ def _capture_tool_workflow(context: dict, tool_name: str, args: dict, out: dict)
                 chapter=str(changes.get("active_chapter") or draft.get("chapter") or ""),
                 lesson=str(draft.get("lesson") or ""),
             )
+        context["workflow_state"] = features.workflow_context(member, session_id)
+    if tool_name in {"get_course_project", "update_course_project"}:
+        context["workflow_state"] = features.workflow_context(member, session_id)
+    elif tool_name.startswith("manage_") and out.get("status") in {"done", "noop"}:
+        course_projects.record_authoring_result(
+            member, session_id, tool_name, args, out,
+        )
         context["workflow_state"] = features.workflow_context(member, session_id)
 def _track_output(context: dict, tool_name: str, out: dict, args: dict | None = None) -> None:
     context["_last_special"] = []
@@ -303,6 +329,8 @@ def _run_tool(registry, allowed: list, role: str, name: str, args: dict, context
     if context.get("user"):
         args["member"] = context["user"]
     args["_role"] = role
+    if context.get("session_id"):
+        args["_session_id"] = context["session_id"]
     tool = registry.get(name)
     run_id = str(context.get("_run_id") or "")
     step_id = ""
@@ -567,6 +595,10 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
         "điểm yếu và evidence/reasons, không yêu cầu người dùng cung cấp thêm phạm vi. "
         "Ưu tiên nhắc đúng concept yếu đã bơm trong prompt; mỗi gợi ý phải kèm vì sao "
         "(evidence gần nhất). Nếu học viên nói ‘không đúng’, gọi record_feedback_correction. "
+        "Với yêu cầu tạo khóa học mới nhiều module, BẮT BUỘC gọi update_course_project với operation=create "
+        "trước khi tạo LMS Course để lưu brief, audience, outcomes, constraints, module_plan và next_actions. "
+        "Mỗi lượt tiếp theo đọc active_project hoặc gọi get_course_project; sau mỗi thay đổi đã duyệt, "
+        "checkpoint completed_items/current_focus/next_actions. Không dùng lịch sử chat làm nguồn chuẩn dự án. "
         "Khi người dùng nói rõ một thông tin bền vững (tên gọi, mục tiêu, trình độ, sở thích học), "
         "gọi remember_user_fact để lưu. Khi câu hỏi cần thông tin đã biết trước đây, "
         "gọi recall_user_facts trước khi trả lời. Không bao giờ lưu mật khẩu/OTP/bí mật."
@@ -697,6 +729,10 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
         "điểm yếu và evidence/reasons, không yêu cầu người dùng cung cấp thêm phạm vi. "
         "Ưu tiên nhắc đúng concept yếu đã bơm trong prompt; mỗi gợi ý phải kèm vì sao "
         "(evidence gần nhất). Nếu học viên nói ‘không đúng’, gọi record_feedback_correction. "
+        "Với yêu cầu tạo khóa học mới nhiều module, BẮT BUỘC gọi update_course_project với operation=create "
+        "trước khi tạo LMS Course để lưu brief, audience, outcomes, constraints, module_plan và next_actions. "
+        "Mỗi lượt tiếp theo đọc active_project hoặc gọi get_course_project; sau mỗi thay đổi đã duyệt, "
+        "checkpoint completed_items/current_focus/next_actions. Không dùng lịch sử chat làm nguồn chuẩn dự án. "
         "Khi người dùng nói rõ một thông tin bền vững (tên gọi, mục tiêu, trình độ, sở thích học), "
         "gọi remember_user_fact để lưu. Khi câu hỏi cần thông tin đã biết trước đây, "
         "gọi recall_user_facts trước khi trả lời. Không bao giờ lưu mật khẩu/OTP/bí mật."

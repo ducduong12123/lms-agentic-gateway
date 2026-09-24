@@ -14,6 +14,7 @@ class FakeFrappe:
 
     def __init__(self):
         self.docs = {
+            "LMS Category": [{"name": "Artificial intelligence", "category": "Artificial intelligence"}],
             "LMS Course": [{
                 "name": "PY-101", "title": "Python", "modified": "v1",
                 "chapters": [{"chapter": "CH-1"}],
@@ -107,6 +108,55 @@ def test_every_write_operation_dry_run_performs_zero_writes(tmp_path, monkeypatc
         assert result.get("status") == "pending_approval", (tool_name, args.get("operation"), result)
         assert result.get("plan_id"), (tool_name, args.get("operation"))
         _assert_no_writes(frappe)
+
+
+def test_manage_course_create_defaults_instructor_to_requesting_member(tmp_path, monkeypatch):
+    _isolate_db(monkeypatch, tmp_path)
+    registry = _registry(FakeFrappe())
+
+    result = registry.get("manage_course").func({
+        "operation": "create",
+        "title": "AI",
+        "description": "Course",
+        "short_introduction": "Intro",
+        "member": "teacher@example.com",
+        "dry_run": True,
+    })
+
+    assert result["items"][0]["payload"]["fields"]["instructors"] == [
+        {"instructor": "teacher@example.com"}
+    ]
+
+
+def test_manage_course_preview_rejects_missing_category_before_plan(tmp_path, monkeypatch):
+    _isolate_db(monkeypatch, tmp_path)
+    frappe = FakeFrappe()
+    registry = _registry(frappe)
+    assert registry.get("get_course_categories").func({})["categories"][0]["name"] == "Artificial intelligence"
+
+    try:
+        registry.get("manage_course").func({
+            "operation": "create", "title": "T", "description": "D",
+            "short_introduction": "S", "category": "Education", "dry_run": True,
+        })
+    except ValueError as exc:
+        assert "Education" in str(exc)
+        assert "Artificial intelligence" in str(exc)
+    else:
+        raise AssertionError("unknown category should be rejected before approval")
+    _assert_no_writes(frappe)
+    assert not (tmp_path / "plans.db").exists()
+
+
+def test_manage_course_preview_accepts_existing_category(tmp_path, monkeypatch):
+    _isolate_db(monkeypatch, tmp_path)
+    frappe = FakeFrappe()
+    result = _registry(frappe).get("manage_course").func({
+        "operation": "create", "title": "T", "description": "D",
+        "short_introduction": "S", "category": "Artificial intelligence", "dry_run": True,
+    })
+    assert result["status"] == "pending_approval"
+    _assert_no_writes(frappe)
 
 
 def test_delete_operations_are_not_offered_by_tool_schemas():

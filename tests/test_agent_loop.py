@@ -266,5 +266,5 @@ def test_ambiguous_teacher_request_routes_and_executes_multiple_domains():
         "list_at_risk_students", "search_courses",
     ]
     assert result["plan"]["bundles"] == [
-        "course.read", "course.authoring", "analytics.learning",
+        "course.read", "course.authoring", "course.workspace", "analytics.learning",
     ]

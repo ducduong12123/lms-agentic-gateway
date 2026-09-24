@@ -66,8 +66,8 @@
     ".acp-canvas-head h2{margin:0;font-size:18px;font-weight:600}.acp-canvas-close{background:transparent;border:0;color:#aaa;font-size:22px;cursor:pointer}",
     ".acp-canvas-body{max-width:760px;margin:0 auto;padding:24px}.acp-canvas-card{background:#1b1b1b;border:1px solid #303030;border-radius:12px;padding:16px;margin-bottom:12px}",
     ".acp-canvas-card h3{margin:0 0 8px;color:#fff;font-size:15px}.acp-canvas-card p{margin:6px 0;color:#c6c6c6;line-height:1.55}",
-    ".acp-canvas-card pre{white-space:pre-wrap;color:#cfcfcf;font:inherit;line-height:1.55}.acp-canvas-card button,.acp-action-card button{background:#2f81f7;color:#fff;border:0;border-radius:7px;padding:7px 11px;cursor:pointer}",
-    ".acp-action-card{margin-top:12px;padding:12px;border:1px solid #31527d;background:#152337;border-radius:10px;color:#d9e7fa}.acp-action-card h4{margin:0 0 5px;color:#fff;font-size:13px}.acp-action-card p{margin:4px 0;line-height:1.45}.acp-action-changes{margin:8px 0;padding-left:18px;color:#b8c6d9;font-size:12px}.acp-action-card button{margin:4px 6px 0 0;font-size:12px}.acp-action-card button.secondary{background:#283342;color:#d6e2f0}",
+    ".acp-canvas-card pre{white-space:pre-wrap;color:#cfcfcf;font:inherit;line-height:1.55}.acp-canvas-card button,.acp-action-card button{background:var(--acp-accent);color:#fff;border:0;border-radius:7px;padding:7px 11px;cursor:pointer}",
+    ".acp-action-card{margin-top:12px;padding:13px;border:1px solid var(--acp-border-strong);background:var(--acp-surface-raised);border-radius:12px;color:var(--acp-ink)}.acp-action-card h4{margin:0 0 4px;color:var(--acp-ink);font-size:13px}.acp-action-card>p{margin:4px 0 9px;color:var(--acp-ink-muted);line-height:1.45}.acp-action-changes{margin:8px 0;padding-left:18px;color:var(--acp-ink-muted);font-size:12px}.acp-action-card button{margin:4px 6px 0 0;font-size:12px}.acp-action-card button.secondary{background:var(--acp-surface-subtle);color:var(--acp-ink-muted);border:1px solid var(--acp-border)}",
     "#acp-head{position:relative;display:flex;align-items:center;gap:6px;padding:8px 10px 8px 12px;border-bottom:1px solid #1f1f1f;background:#111}",
     "#acp-avatar{width:26px;height:26px;flex:0 0 auto;border-radius:50%;background:#e8e8e8;color:#333;",
     "display:flex;align-items:center;justify-content:center;font-size:13px}",
@@ -139,7 +139,7 @@
     "#acp-insight[hidden]{display:none}#acp-insight b{color:#fff}#acp-insight button{margin:8px 6px 0 0;border:1px solid #3c665b;background:transparent;color:#bfe2d6;border-radius:7px;padding:5px 8px;cursor:pointer}",
     ".acp-ap{margin-top:10px;border:1px solid #554507;background:#221d0c;border-radius:8px;padding:10px;color:#e7c96f;font-size:12.5px}",
     ".acp-ap button{margin-top:8px;background:#2f81f7;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600}",
-    ".acp-plan-review{margin:8px 0 2px;border:1px solid #2c2c2c;border-radius:8px;overflow:hidden}.acp-plan-item{padding:8px;border-top:1px solid #242424}.acp-plan-item:first-child{border-top:0}.acp-plan-item h5{margin:0 0 4px;font-size:12.5px;color:#eee}.acp-plan-item pre{margin:6px 0 0;background:#181818;border:1px solid #2c2c2c;border-radius:6px;padding:7px;color:#cfcfcf;font-size:11.5px;white-space:pre-wrap}.acp-plan-item textarea{width:100%;box-sizing:border-box;margin-top:6px;background:#181818;color:#eee;border:1px solid #333;border-radius:6px;padding:7px;font:inherit;font-size:12px}.acp-plan-item .row{display:flex;gap:6px;margin-top:7px}.acp-plan-item button{background:#2f81f7;color:#fff;border:0;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}.acp-plan-item button.secondary{background:transparent;color:#bbb;border:1px solid #3a3a3a}.acp-plan-item .status{margin-left:6px;font-size:11px;color:#999}.acp-reversibility{display:inline-block;margin:6px 0 0;padding:2px 8px;border-radius:20px;font-size:11px;border:1px solid #444;color:#ddd}.acp-reversibility.reversible{border-color:#2f6f4f;color:#9fe0bd}.acp-reversibility.compensating{border-color:#554507;color:#e7c96f}.acp-reversibility.irreversible{border-color:#6e2b2b;color:#f0a8a8}",
+    ".acp-plan-review{margin:10px 0 2px;border:1px solid var(--acp-border);border-radius:10px;overflow:hidden;background:var(--acp-surface)}.acp-plan-item{padding:11px;border-top:1px solid var(--acp-border)}.acp-plan-item:first-child{border-top:0}.acp-plan-item h5{margin:0 0 8px;font-size:12.5px;color:var(--acp-ink)}.acp-preview-grid{display:grid;gap:0;border:1px solid var(--acp-border);border-radius:8px;overflow:hidden}.acp-preview-field{display:grid;grid-template-columns:108px minmax(0,1fr);gap:9px;padding:7px 9px;border-top:1px solid var(--acp-border);font-size:11.5px;line-height:1.45}.acp-preview-field:first-child{border-top:0}.acp-preview-field.wide{display:block}.acp-preview-label{color:var(--acp-ink-faint);font-size:10.5px}.acp-preview-value{color:var(--acp-ink);overflow-wrap:anywhere}.acp-preview-field.wide .acp-preview-value{margin-top:3px}.acp-preview-empty{padding:9px;color:var(--acp-ink-faint);font-size:11.5px}.acp-preview-raw{margin-top:7px;color:var(--acp-ink-faint);font-size:10.5px}.acp-preview-raw summary{cursor:pointer}.acp-preview-raw pre{max-height:180px;margin:6px 0 0!important;background:var(--acp-surface-subtle)!important;border:1px solid var(--acp-border)!important;border-radius:6px;padding:7px!important;color:var(--acp-ink-muted)!important;font-size:10.5px!important;white-space:pre-wrap}.acp-plan-item textarea{width:100%;box-sizing:border-box;margin-top:7px;background:var(--acp-surface-subtle);color:var(--acp-ink);border:1px solid var(--acp-border);border-radius:7px;padding:8px;font:inherit;font-size:11.5px;min-height:96px}.acp-plan-item .row{display:flex;align-items:center;gap:5px;margin-top:8px}.acp-plan-item button{background:var(--acp-accent);color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer;font-size:11px}.acp-plan-item button.secondary{background:transparent;color:var(--acp-ink-muted);border:1px solid var(--acp-border)}.acp-plan-item .status{margin-left:auto;color:var(--acp-ink-faint);font-size:10.5px}.acp-reversibility{display:inline-block;margin:0 0 2px;border:1px solid var(--acp-border);border-radius:999px;padding:2px 7px;color:var(--acp-ink-muted);font-size:10.5px}",
     "#acp-type{display:none;padding:0 20px 8px;background:#111;color:#777;font-size:12px}",
     "#acp-type i{display:inline-block;width:4px;height:4px;border-radius:50%;background:#777;margin-right:3px;animation:acpb 1s infinite}",
     "@keyframes acpb{0%,100%{opacity:.25}50%{opacity:1}}",
@@ -195,7 +195,7 @@
     "#acp-side.shell{right:0;top:0;bottom:0;width:100vw;max-width:100vw;border-radius:0}body.acp-shell-open{padding-right:0!important;overflow-x:hidden}",
     "body.acp-shell-open #app > .w-screen{width:100vw!important}#acp-fab{right:16px;bottom:16px}}",
     ".acp-cursor{display:inline-block;width:7px;height:15px;background:#2f81f7;vertical-align:-2px;margin-left:2px;animation:acpb .8s infinite}",
-    ":host{--acp-surface:var(--surface-base,#fff);--acp-surface-muted:var(--surface-gray-1,#f8f9fa);--acp-surface-raised:var(--surface-gray-2,#f1f3f5);--acp-border:var(--outline-gray-2,#e2e5e8);--acp-border-strong:var(--outline-gray-3,#cbd0d5);--acp-ink:var(--ink-gray-8,#202124);--acp-ink-muted:var(--ink-gray-6,#687078);--acp-ink-subtle:var(--ink-gray-5,#8a9096);--acp-accent:var(--blue-600,#3b82f6);--acp-accent-soft:var(--surface-blue-1,#eff6ff);--acp-danger:var(--surface-red-6,#d64545);color-scheme:light}",
+    ":host{--acp-surface:var(--surface-base,#fff);--acp-surface-muted:var(--surface-gray-1,#f8f9fa);--acp-surface-subtle:var(--surface-gray-1,#f8f9fa);--acp-surface-raised:var(--surface-gray-2,#f1f3f5);--acp-border:var(--outline-gray-2,#e2e5e8);--acp-border-strong:var(--outline-gray-3,#cbd0d5);--acp-ink:var(--ink-gray-8,#202124);--acp-ink-muted:var(--ink-gray-6,#687078);--acp-ink-subtle:var(--ink-gray-5,#8a9096);--acp-ink-faint:var(--ink-gray-5,#8a9096);--acp-accent:var(--blue-600,#3b82f6);--acp-accent-soft:var(--surface-blue-1,#eff6ff);--acp-danger:var(--surface-red-6,#d64545);color-scheme:light}",
     ":host([data-theme='dark']){color-scheme:dark}",
     "#acp-side,#acp-canvas{background:var(--acp-surface);color:var(--acp-ink);border-color:var(--acp-border)}",
     "#acp-head,#acp-msgs,#acp-inbar,#acp-type{background:var(--acp-surface);color:var(--acp-ink);border-color:var(--acp-border)}",
@@ -629,12 +629,12 @@
       box.appendChild(badge);
     }
     var undo = card.undo || {};
-    if (card.preview) {
+    if (card.preview && card.status !== "pending_approval") {
       var preview = document.createElement("pre");
       preview.textContent = String(card.preview).slice(0, 1200);
       box.appendChild(preview);
     }
-    if ((card.changes || []).length) {
+    if ((card.changes || []).length && card.status !== "pending_approval") {
       var ul = document.createElement("ul"); ul.className = "acp-action-changes";
       card.changes.forEach(function (change) { var li = document.createElement("li"); li.textContent = actionChangeText(change); ul.appendChild(li); });
       box.appendChild(ul);
@@ -662,6 +662,60 @@
     }
     target.appendChild(box);
   }
+  var PLAN_FIELD_LABELS = {
+    title: "Tên khóa học", short_introduction: "Giới thiệu ngắn", description: "Mô tả",
+    category: "Danh mục", instructors: "Giảng viên", published: "Xuất bản",
+    upcoming: "Sắp ra mắt", featured: "Nổi bật", disable_self_learning: "Tắt tự học",
+    enforce_lesson_completion: "Bắt buộc hoàn thành bài", paid_course: "Khóa học trả phí",
+    course_price: "Học phí", currency: "Tiền tệ", enable_certification: "Cấp chứng chỉ",
+    evaluator: "Người đánh giá", timezone: "Múi giờ", card_gradient: "Màu thẻ",
+    video_link: "Video", related_courses: "Khóa học liên quan"
+  };
+  function previewValue(key, value) {
+    if (Array.isArray(value)) {
+      return value.map(function (item) {
+        if (item && typeof item === "object") return item.instructor || item.course || item.title || item.name || JSON.stringify(item);
+        return String(item);
+      }).join(", ");
+    }
+    if (value && typeof value === "object") return JSON.stringify(value);
+    if (typeof value === "boolean") return value ? "Có" : "Không";
+    if (typeof value === "number" && ["published", "upcoming", "featured", "disable_self_learning", "enforce_lesson_completion", "paid_course", "enable_certification"].indexOf(key) >= 0) return value ? "Có" : "Không";
+    return String(value);
+  }
+  function renderPlanPreview(target, raw) {
+    var data = raw && Object.prototype.hasOwnProperty.call(raw, "after") ? raw.after : raw;
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      var scalar = document.createElement("div"); scalar.className = "acp-preview-empty";
+      scalar.textContent = data == null ? "Không có dữ liệu xem trước." : String(data);
+      target.appendChild(scalar); return;
+    }
+    var grid = document.createElement("div"); grid.className = "acp-preview-grid";
+    var keys = Object.keys(data).filter(function (key) {
+      var value = data[key];
+      return value !== "" && value != null && (!Array.isArray(value) || value.length);
+    });
+    keys.sort(function (a, b) {
+      var order = ["title", "short_introduction", "description", "category", "instructors", "published", "course_price", "currency"];
+      var ai = order.indexOf(a), bi = order.indexOf(b);
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+    });
+    keys.forEach(function (key) {
+      var row = document.createElement("div");
+      row.className = "acp-preview-field" + (key === "description" || key === "short_introduction" ? " wide" : "");
+      var label = document.createElement("div"); label.className = "acp-preview-label";
+      label.textContent = PLAN_FIELD_LABELS[key] || key.replace(/_/g, " ");
+      var value = document.createElement("div"); value.className = "acp-preview-value";
+      value.textContent = previewValue(key, data[key]);
+      row.appendChild(label); row.appendChild(value); grid.appendChild(row);
+    });
+    if (keys.length) target.appendChild(grid);
+    else { var empty = document.createElement("div"); empty.className = "acp-preview-empty"; empty.textContent = "Không có trường thay đổi."; target.appendChild(empty); }
+    var details = document.createElement("details"); details.className = "acp-preview-raw";
+    var summary = document.createElement("summary"); summary.textContent = "Xem dữ liệu kỹ thuật";
+    var pre = document.createElement("pre"); pre.textContent = JSON.stringify(raw || {}, null, 2).slice(0, 5000);
+    details.appendChild(summary); details.appendChild(pre); target.appendChild(details);
+  }
   function renderPlanReview(box, card) {
     var review = document.createElement("div");
     review.className = "acp-plan-review";
@@ -673,9 +727,7 @@
       var title = document.createElement("h5");
       title.textContent = item.label || item.id || "Mục thay đổi";
       wrap.appendChild(title);
-      var beforeAfter = document.createElement("pre");
-      beforeAfter.textContent = JSON.stringify(item.preview || item.payload || {}, null, 2).slice(0, 1200);
-      wrap.appendChild(beforeAfter);
+      renderPlanPreview(wrap, item.preview || item.payload || {});
       var status = document.createElement("span");
       status.className = "status";
       status.textContent = "Chờ duyệt";
@@ -937,6 +989,8 @@
       manage_lesson_block: "Quản lý khối nội dung", manage_quiz: "Quản lý quiz",
       manage_assignment: "Quản lý assignment", manage_programming_exercise: "Quản lý bài lập trình",
       remember_user_fact: "Ghi nhớ thông tin", recall_user_facts: "Nhớ lại thông tin",
+      list_course_projects: "Liệt kê dự án khóa học", get_course_project: "Khôi phục checkpoint khóa học",
+      update_course_project: "Lưu checkpoint khóa học",
       forget_user_fact: "Quên thông tin", get_my_mastery: "Xem điểm yếu",
       record_feedback_correction: "Ghi nhận góp ý", enroll_course: "Ghi danh khóa học",
       mark_lesson_complete: "Đánh dấu bài học hoàn tất", save_note: "Lưu ghi chú",

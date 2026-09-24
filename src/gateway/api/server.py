@@ -20,7 +20,7 @@ from gateway.config import settings
 from gateway.connector.frappe_client import FrappeClient
 from gateway.runtime import plan_apply, write_plans
 from gateway.runtime.agent_loop import learner_context_for_prompt, run_agent, run_agent_stream
-from gateway.runtime import actions, runs
+from gateway.runtime import actions, course_projects, runs
 from gateway.runtime.approval import mark_executed, peek_approval, pending_for
 from gateway.runtime.approval import approve as claim_approval
 from gateway.runtime.events import EventProcessor
@@ -659,6 +659,19 @@ def _execute_approval(approval_id: str, decision: ApprovalDecision | None, reque
             )
     mark_executed(approval_id, result)
     resumed = runs.complete_approval(approval_id, result)
+    if (
+        resumed
+        and record["tool"].startswith("manage_")
+        and isinstance(result, dict)
+        and "error" not in result
+    ):
+        course_projects.record_authoring_result(
+            identity.user,
+            str(resumed.get("session_id") or ""),
+            str(record["tool"]),
+            args,
+            result,
+        )
     draft_id = str(args.get("draft_id") or "")
     if draft_id:
         draft = features.get_lesson_draft(identity.user, draft_id)

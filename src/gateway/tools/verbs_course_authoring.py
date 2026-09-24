@@ -29,13 +29,54 @@ def snapshot_document(frappe, doctype: str, name: str) -> dict:
     return _data(frappe.get_document(doctype, name))
 
 
-def normalize_course_fields(fields: dict) -> dict:
+def normalize_course_fields(fields: dict, default_instructor: str = "") -> dict:
     normalized = dict(fields or {})
-    if "instructors" in normalized:
-        normalized["instructors"] = [{"instructor": item} for item in normalized["instructors"]]
+    instructors = normalized.get("instructors")
+    if not instructors and default_instructor:
+        instructors = [default_instructor]
+    if instructors is not None:
+        normalized["instructors"] = _normalize_course_child_rows(
+            instructors, "instructor", "instructors",
+        )
     if "related_courses" in normalized:
-        normalized["related_courses"] = [{"course": item} for item in normalized["related_courses"]]
+        normalized["related_courses"] = _normalize_course_child_rows(
+            normalized["related_courses"], "course", "related_courses",
+        )
     return normalized
+
+
+def _normalize_course_child_rows(value: object, field: str, label: str) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise ValueError(f"{label} must be an array")
+    rows = []
+    for index, item in enumerate(value, start=1):
+        # Accept legacy object-shaped input, but never forward caller-controlled
+        # Frappe child-row metadata such as parent, idx, or docstatus.
+        candidate = item.get(field) if isinstance(item, dict) else item
+        if not isinstance(candidate, str) or not candidate.strip():
+            raise ValueError(f"{label}[{index}] must contain a non-empty {field}")
+        rows.append({field: candidate.strip()})
+    return rows
+
+
+def validate_course_category(frappe, fields: dict) -> None:
+    """Reject unknown Link values before saving an approval plan or a course."""
+    category = str(fields.get("category") or "").strip()
+    if not category:
+        return
+    matches = frappe.list_documents(
+        "LMS Category", filters={"name": category}, fields=["name"], limit=1,
+    ).get("data", [])
+    if matches:
+        return
+    available = frappe.list_documents(
+        "LMS Category", fields=["name"], limit=500,
+    ).get("data", [])
+    names = ", ".join(str(row.get("name")) for row in available if row.get("name"))
+    raise ValueError(
+        f"Danh mục khóa học '{category}' chưa tồn tại trong Frappe. "
+        f"Hãy chọn một danh mục hiện có ({names or 'chưa có'}) hoặc tạo danh mục trước khi gửi duyệt."
+    )
 
 
 def child_names(document: dict, table: str, field: str) -> list[str]:
@@ -162,6 +203,17 @@ def _register_mutation(reg: ToolRegistry, name: str, description: str, parameter
 
 
 def register(reg: ToolRegistry, frappe) -> None:
+    def get_course_categories(a: dict):
+        return {"categories": frappe.list_documents(
+            "LMS Category", fields=["name", "category"], limit=500,
+        ).get("data", [])}
+
+    reg.register(Tool(
+        "get_course_categories",
+        "Liệt kê danh mục LMS hiện có. Dùng trước khi đặt category cho khóa học; tên category phải khớp chính xác.",
+        {"type": "object", "properties": {}}, get_course_categories,
+    ))
+
     def get_course_authoring_state(a: dict):
         course = _require(a.get("course"), "course")
         course_doc = _data(frappe.get_document("LMS Course", course))
@@ -200,11 +252,11 @@ def register(reg: ToolRegistry, frappe) -> None:
         if operation == "create":
             for field in ("title", "description", "short_introduction"):
                 _require(a.get(field), field)
-            fields = _pick(a, course_fields)
-            if "instructors" in fields:
-                fields["instructors"] = [{"instructor": item} for item in fields["instructors"]]
-            if "related_courses" in fields:
-                fields["related_courses"] = [{"course": item} for item in fields["related_courses"]]
+            fields = normalize_course_fields(
+                _pick(a, course_fields),
+                default_instructor=_course_plan_member(a),
+            )
+            validate_course_category(frappe, fields)
             if _course_plan_is_preview(a):
                 return _course_plan_finish(
                     action="manage_course", title="Xem trước tạo khóa học",
@@ -245,6 +297,7 @@ def register(reg: ToolRegistry, frappe) -> None:
         fields = _pick(a, course_fields)
         if not fields:
             raise ValueError("at least one course field is required for update")
+        validate_course_category(frappe, fields)
         if _course_plan_is_preview(a):
             before = _data(frappe.get_document("LMS Course", course))
             normalized = dict(fields)
@@ -276,7 +329,7 @@ def register(reg: ToolRegistry, frappe) -> None:
         "type": "object", "properties": {
             "operation": {"type": "string", "enum": ["create", "update", "reorder"]}, "course": {"type": "string"},
             "title": {"type": "string"}, "description": {"type": "string"}, "short_introduction": {"type": "string"},
-            "category": {"type": "string"}, "video_link": {"type": "string"}, "published": {"type": "integer", "enum": [0, 1]},
+            "category": {"type": "string", "description": "Tên LMS Category đã tồn tại, khớp chính xác; gọi get_course_categories trước khi chọn"}, "video_link": {"type": "string"}, "published": {"type": "integer", "enum": [0, 1]},
             "upcoming": {"type": "integer", "enum": [0, 1]}, "featured": {"type": "integer", "enum": [0, 1]},
             "disable_self_learning": {"type": "integer", "enum": [0, 1]}, "enforce_lesson_completion": {"type": "integer", "enum": [0, 1]},
             "paid_course": {"type": "integer", "enum": [0, 1]}, "enable_certification": {"type": "integer", "enum": [0, 1]},

@@ -18,7 +18,7 @@ class ToolBundle:
 BUNDLES: dict[str, ToolBundle] = {
     "course.read": ToolBundle(
         "course.read", "Đọc khóa học", "Tìm và đọc cấu trúc, bài học, trạng thái biên soạn.",
-        frozenset({"search_courses", "get_course_outline", "get_lesson_context", "get_course_authoring_state"}),
+        frozenset({"search_courses", "get_course_outline", "get_lesson_context", "get_course_authoring_state", "get_course_categories"}),
     ),
     "course.authoring": ToolBundle(
         "course.authoring", "Biên soạn khóa học", "Tạo và cập nhật nội dung khóa học.",
@@ -27,6 +27,11 @@ BUNDLES: dict[str, ToolBundle] = {
             "publish_lesson_draft", "manage_course", "manage_chapter", "manage_lesson",
             "manage_lesson_block", "manage_quiz", "manage_assignment", "manage_programming_exercise",
         }),
+    ),
+    "course.workspace": ToolBundle(
+        "course.workspace", "Bộ nhớ dự án khóa học",
+        "Checkpoint bền vững cho mục tiêu, quyết định, module, tiến độ và việc tiếp theo.",
+        frozenset({"list_course_projects", "get_course_project", "update_course_project"}),
     ),
     "memory.personal": ToolBundle(
         "memory.personal", "Ký ức dài hạn", "Ghi nhớ, tìm lại hoặc quên thông tin cá nhân.",
@@ -61,8 +66,8 @@ _MUTATING = {
     "update_course_content_after_approval", "publish_lesson_draft", "manage_course", "manage_chapter",
     "manage_lesson", "manage_lesson_block", "manage_quiz", "manage_assignment",
     "manage_programming_exercise", "remember_user_fact", "forget_user_fact", "record_feedback_correction",
-    "enroll_course", "mark_lesson_complete", "save_note", "create_review_set", "schedule_review", "set_goal",
-    "message_students", "create_live_class",
+    "update_course_project", "enroll_course", "mark_lesson_complete", "save_note",
+    "create_review_set", "schedule_review", "set_goal", "message_students", "create_live_class",
 }
 
 _WRITE_REVERSIBILITY = {
@@ -77,6 +82,7 @@ _WRITE_REVERSIBILITY = {
     "manage_programming_exercise": "compensating",
     "remember_user_fact": "reversible",
     "forget_user_fact": "irreversible",
+    "update_course_project": "reversible",
     "record_feedback_correction": "reversible",
     "enroll_course": "compensating",
     "mark_lesson_complete": "reversible",
@@ -132,14 +138,36 @@ def select_bundles(
     workflow = workflow or {}
     selected: set[str] = set()
 
+    active_project = workflow.get("active_project")
     if route.get("kind") in {"course", "lesson"} or workflow.get("active_course"):
         selected.add("course.read")
-    if _has(text, "khoa hoc", "course", "chuong", "chapter", "bai hoc", "lesson", "noi dung"):
+    if active_project:
+        selected.update({"course.read", "course.workspace"})
+        project_status = str(active_project.get("status") or "") if isinstance(active_project, dict) else ""
+        if role in {"teacher", "admin"} and project_status in {"planning", "authoring", "review"}:
+            selected.add("course.authoring")
+    course_subject = _has(
+        text, "khoa hoc", "course", "chuong", "chapter", "bai hoc", "lesson",
+        "noi dung", "module", "mo dun", "de cuong",
+    )
+    authoring_action = _has(
+        text, "tao", "them", "viet", "sua", "cap nhat", "cai thien", "bien soan",
+        "soan", "xuat ban", "luu", "xay dung", "chinh sua",
+    )
+    if course_subject:
         selected.add("course.read")
-    if _has(text, "tao khoa", "sua khoa", "cap nhat khoa", "cai thien", "bien soan", "soan",
-            "xuat ban", "luu vao lms", "tao bai", "sua bai", "tao quiz", "assignment",
-            "bai lap trinh"):
-        selected.update({"course.read", "course.authoring"})
+    if role in {"teacher", "admin"} and course_subject and authoring_action:
+        selected.update({"course.read", "course.authoring", "course.workspace"})
+    if role in {"teacher", "admin"} and _has(text, "tao quiz", "assignment", "bai lap trinh"):
+        selected.update({"course.read", "course.authoring", "course.workspace"})
+    confirmation = "ok" in text.split() or _has(
+        text, "chap nhan", "dong y", "tiep tuc", "lam di", "trien khai", "thuc hien",
+        "bat dau",
+    )
+    if role in {"teacher", "admin"} and workflow.get("active_course") and confirmation:
+        selected.update({"course.read", "course.authoring", "course.workspace"})
+    if _has(text, "du an khoa hoc", "ke hoach module", "checkpoint", "tiep tuc du an"):
+        selected.add("course.workspace")
     if _has(text, "nho", "ghi nho", "quen", "ten toi", "toi ten", "goi toi", "truoc day",
             "lan truoc", "ban nho", "muc tieu cua toi", "so thich", "trinh do cua toi"):
         selected.add("memory.personal")
@@ -155,7 +183,7 @@ def select_bundles(
         selected.add("client.ui")
 
     if role in {"teacher", "admin"} and "course.authoring" in selected:
-        selected.add("analytics.learning")
+        selected.update({"analytics.learning", "course.workspace"})
     if not selected:
         selected.add("course.read" if route.get("kind") in {"course", "lesson"} else "client.ui")
     return [name for name in BUNDLES if name in selected]
@@ -173,8 +201,8 @@ def plan_request(
         steps.append({"id": "discover", "label": "Xác định khóa học và ngữ cảnh", "status": "pending"})
     if "analytics.learning" in bundles:
         steps.append({"id": "analyze", "label": "Phân tích dữ liệu học tập liên quan", "status": "pending"})
-    if any(name in bundles for name in ("memory.personal", "student.learning", "client.ui")):
-        steps.append({"id": "context", "label": "Thu thập ngữ cảnh cần thiết", "status": "pending"})
+    if any(name in bundles for name in ("memory.personal", "course.workspace", "student.learning", "client.ui")):
+        steps.append({"id": "context", "label": "Khôi phục checkpoint và ngữ cảnh cần thiết", "status": "pending"})
     if any(name in bundles for name in ("course.authoring", "class.operations", "student.learning")):
         steps.append({"id": "execute", "label": "Thực hiện các thao tác phù hợp", "status": "pending"})
     steps.append({"id": "verify", "label": "Kiểm tra kết quả và tổng hợp", "status": "pending"})

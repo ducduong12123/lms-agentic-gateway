@@ -41,4 +41,35 @@ def test_bundle_router_limits_teacher_tools_to_relevant_domains():
     assert "remember_user_fact" not in names
     assert all(registry.get(name).bundles for name in registry.names())
     assert select_bundles("Tên tôi là An, hãy ghi nhớ", "student") == ["memory.personal"]
+
+
+def test_teacher_course_authoring_intent_survives_natural_vietnamese_word_order():
+    bundles = select_bundles(
+        "tạo cho tôi các bài học trong khóa học ứng dụng coding harness",
+        "admin",
+    )
+    assert {"course.read", "course.authoring", "course.workspace"} <= set(bundles)
+
+
+def test_active_authoring_project_keeps_write_tools_on_short_follow_up():
+    bundles = select_bundles(
+        "ok chấp nhận",
+        "admin",
+        workflow={"active_project": {"id": "cprj-1", "status": "planning"}},
+    )
+    assert {"course.read", "course.authoring", "course.workspace"} <= set(bundles)
+
+
+def test_confirmation_keeps_write_tools_after_course_discovery():
+    bundles = select_bundles(
+        "ok chấp nhận",
+        "admin",
+        workflow={"active_course": "ai-ung-dung"},
+    )
+    assert {"course.read", "course.authoring", "course.workspace"} <= set(bundles)
+
+
+def test_student_course_question_does_not_receive_authoring_bundle():
+    bundles = select_bundles("tạo cho tôi bài học này dễ hiểu hơn", "student")
+    assert "course.authoring" not in bundles
 print("OK tools:", names)

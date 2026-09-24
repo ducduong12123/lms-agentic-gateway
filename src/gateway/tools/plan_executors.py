@@ -33,9 +33,13 @@ def apply_manage_course_create(frappe, plan: dict, merged: dict[str, dict]) -> d
             fields.update(_scoped_fields(entry_fields, authoring.COURSE_FIELD_SET))
     if not fields:
         raise ValueError("no approved course fields to apply")
-    fields = authoring.normalize_course_fields(fields)
+    fields = authoring.normalize_course_fields(
+        fields,
+        default_instructor=str((plan.get("args") or {}).get("member") or ""),
+    )
     for field in ("title", "description", "short_introduction"):
         authoring.require_text(fields.get(field), field)
+    authoring.validate_course_category(frappe, fields)
     result = frappe.create_document("LMS Course", fields)
     name = authoring.created_name(result, str(fields.get("title") or ""))
     changes = [{"doctype": "LMS Course", "name": name, "op": "create"}]
@@ -59,6 +63,7 @@ def apply_manage_course_update(frappe, plan: dict, merged: dict[str, dict]) -> d
         raise ValueError("course is required")
     course = authoring.require_text(course, "course")
     fields = authoring.normalize_course_fields(fields)
+    authoring.validate_course_category(frappe, fields)
     before = _before_for_apply(frappe, plan.get("expected_modified") or {})
     plan_apply.check_expected_modified(frappe, plan.get("expected_modified") or {})
     frappe.update_document("LMS Course", course, fields)
@@ -84,8 +89,6 @@ def apply_manage_chapter_create(frappe, plan: dict, merged: dict[str, dict]) -> 
         title = str(payload.get("title") or title)
     course = authoring.require_text(course, "course")
     title = authoring.require_text(title, "title")
-    before = _before_for_apply(frappe, plan.get("expected_modified") or {})
-    plan_apply.check_expected_modified(frappe, plan.get("expected_modified") or {})
     created = frappe.create_document("Course Chapter", {"course": course, "title": title})
     chapter = authoring.created_name(created, title)
     document = authoring.snapshot_document(frappe, "LMS Course", course)
@@ -119,8 +122,6 @@ def apply_manage_lesson_create(frappe, plan: dict, merged: dict[str, dict]) -> d
     chapter = authoring.require_text(chapter, "chapter")
     title = authoring.require_text(title, "title")
     fields = {"course": course, "chapter": chapter, "title": title, **fields}
-    before = _before_for_apply(frappe, plan.get("expected_modified") or {})
-    plan_apply.check_expected_modified(frappe, plan.get("expected_modified") or {})
     created = frappe.create_document("Course Lesson", fields)
     lesson = authoring.created_name(created, title)
     authoring.ensure_lesson_reference(frappe, chapter, lesson)
