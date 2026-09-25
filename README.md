@@ -121,6 +121,7 @@ works: Ollama, vLLM, LM Studio, OpenAI.
 | Authoring writes (approval-gated) | `manage_course`, `manage_chapter`, `manage_lesson`, `manage_lesson_block`, `manage_quiz`, `manage_assignment`, `manage_programming_exercise`, `create_live_class`, `publish_lesson_draft`, `message_students`, `update_course_content_after_approval` | Produce a write plan; nothing reaches Frappe before approval. |
 | Client-directed | `navigate`, `render_view` | Validated navigation and closed view specs only — the model cannot emit arbitrary HTML / JS. |
 | Memory | `remember_user_fact`, `recall_user_facts`, `forget_user_fact` | Long-term personal memory, per user, erasable. |
+| lms_copilot (when installed) | `copilot_<tool>` for every tool `lms_copilot.api.get_tools` returns to the user, plus `copilot_get_weekly_insight` (Gateway tool) | Students answer from `copilot_search_course_content` / `copilot_get_lesson_content` and must cite blocks; the runtime (not the LLM) logs each turn with `log_conversation_turn`. `log_conversation_turn` and `save_weekly_insight` are runtime-only. |
 
 Every mutating tool returns a closed envelope (`tools/envelope.py`), so the widget renders
 results from a typed contract rather than from free text.
@@ -137,6 +138,7 @@ results from a typed contract rather than from free text.
 | Teacher | `GET /teacher/risk`, `GET /teacher` (console page) |
 | Ops | `POST /ops/recompute`, `POST /ops/run-daily`, `DELETE /me/data` |
 | Integration | `POST /webhook/frappe`, `GET /widget.js`, `GET /widget/{file}` |
+| lms_copilot | `POST /copilot/answers/rate` and `POST /copilot/escalate` (caller's session), `POST /copilot/jobs/weekly` (teacher/admin session or `Bearer COPILOT_JOB_KEY`) |
 
 The full request / response contract, including the exact Frappe DocTypes and fields used, is in
 [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md). Operational and privacy behaviour (retention,
@@ -208,6 +210,8 @@ stdlib parser; the real environment always wins).
 | `POLL_INTERVAL_SECONDS` | `900` | Reconciliation poller interval. |
 | `SCHEDULER_TIMEZONE` / `DAILY_PLAN_HOUR` | `Asia/Ho_Chi_Minh` / `7` | Opt-in daily plan delivery. |
 | `TRANSCRIPT_RETENTION_DAYS` | `90` | Chat transcript retention window. |
+| `COPILOT_JOB_KEY` | empty → bearer disabled | Bearer key for `/copilot/jobs/*`; such calls run as the AI Engine service account. |
+| `WEEKLY_REPORT_HOUR` / `COPILOT_WEEKLY_COURSES` | `7` / empty | Weekly stuck-point report: every Monday at this hour (`SCHEDULER_TIMEZONE`) for the previous week, for these comma-separated courses. |
 
 ## Testing
 
