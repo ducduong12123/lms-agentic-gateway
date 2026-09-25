@@ -137,6 +137,7 @@ results from a typed contract rather than from free text.
 | Teacher | `GET /teacher/risk`, `GET /teacher` (console page) |
 | Ops | `POST /ops/recompute`, `POST /ops/run-daily`, `DELETE /me/data` |
 | Integration | `POST /webhook/frappe`, `GET /widget.js`, `GET /widget/{file}` |
+| Copilot jobs | `POST /copilot/jobs/review` (also `/ai/copilot/jobs/review`): called by `lms_copilot` with `Authorization: Bearer <COPILOT_JOB_KEY>` and `{site, project_submission, rewrite_of, model}`. Returns `202` and reviews the GitHub repo in a background thread: tests in the sandbox, `record_submission_tests`, rubric draft via `propose_feedback`. Jobs are stored in SQLite, idempotent per `(project_submission, rewrite_of)` and resumed on restart. |
 
 The full request / response contract, including the exact Frappe DocTypes and fields used, is in
 [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md). Operational and privacy behaviour (retention,
@@ -208,6 +209,13 @@ stdlib parser; the real environment always wins).
 | `POLL_INTERVAL_SECONDS` | `900` | Reconciliation poller interval. |
 | `SCHEDULER_TIMEZONE` / `DAILY_PLAN_HOUR` | `Asia/Ho_Chi_Minh` / `7` | Opt-in daily plan delivery. |
 | `TRANSCRIPT_RETENTION_DAYS` | `90` | Chat transcript retention window. |
+| `COPILOT_JOB_KEY` | empty → review jobs rejected | Bearer key for `/copilot/jobs/review`; must equal Copilot Settings `gateway_api_key`. |
+| `REVIEW_SANDBOX` | `off` | `docker` runs the learner's tests in a throwaway container (no network, uid 1000, 1 CPU, 512 MB, 128 pids, read-only); `off` skips tests and records "không chạy test". |
+| `REVIEW_SANDBOX_IMAGE` / `REVIEW_TEST_COMMAND` | `python:3.12-slim` / `python -m pytest -q -rA -p no:cacheprovider` | Image and default test command. The image must already contain the test runner (no network inside). A `test_command: ...` line in the rubric notes overrides the command; without it tests only run when the repo has `tests/` or `test_*.py`. |
+| `REVIEW_TEST_TIMEOUT` | `60` s | Sandbox time limit. |
+| `REVIEW_WORK_DIR` | system temp | Where repos are unpacked. If the engine itself runs in Docker, bind-mount this path at the same location on the host so `docker run -v` finds it. |
+| `REVIEW_MAX_REPO_MB` / `REVIEW_MAX_FILES` / `REVIEW_PROMPT_CHARS` | `20` / `200` / `60000` | Tarball size cap, text-file cap, code character budget in the prompt. |
+| `REVIEW_LLM_TIMEOUT` | `180` s | Timeout of the review LLM call. |
 
 ## Testing
 
@@ -228,7 +236,8 @@ src/gateway/
   connector/    frappe_client.py — the only REST caller
   runtime/      agent_loop, model_client, policy, tool_registry, tool_bundles, identity,
                 learner (ITS), features, events, scheduler, memory, long_memory,
-                approval, runs, write_plans, plan_apply, actions, trace, route_adapter
+                approval, runs, write_plans, plan_apply, actions, trace, route_adapter,
+                review_jobs / review_worker / repo_snapshot / sandbox (project review jobs)
   tools/        catalog + verbs_student / verbs_teacher / verbs_course_authoring / verbs_client,
                 envelope (closed result contracts), plan_executors
 widget/         agentic-copilot.js (Shadow DOM), route-adapter.js, README.md
