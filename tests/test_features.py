@@ -88,3 +88,18 @@ def test_preferences_default_off_and_member_can_be_erased(tmp_path):
     assert learner.get_member_pref("student@test.com", path)["daily_plan_opt_in"] is False
     learner.set_member_pref("student@test.com", True, path=path)
     assert features.erase_member("student@test.com", path)["deleted_rows"] == 1
+
+
+def test_qa_escalation_is_deduplicated_and_teacher_can_list_it(tmp_path):
+    path = tmp_path / "gateway.db"
+    first = features.create_qa_escalation("student@test.com", "chat-1", "PY-101", "LESSON-1", "Tại sao code này lỗi?", path=path)
+    second = features.create_qa_escalation("student@test.com", "chat-1", "PY-101", "LESSON-1", "Tại sao code này lỗi?", path=path)
+    assert first["duplicate"] is False
+    assert second["duplicate"] is True
+    assert second["id"] == first["id"]
+    rows = features.list_qa_escalations("PY-101", path=path)
+    assert [row["id"] for row in rows] == [first["id"]]
+    assert rows[0]["status"] == "open"
+    erased = features.erase_member("student@test.com", path)
+    assert erased["deleted_rows"] >= 1
+    assert features.list_qa_escalations("PY-101", path=path) == []

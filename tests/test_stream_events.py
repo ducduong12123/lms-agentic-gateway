@@ -86,3 +86,23 @@ def test_stream_yields_action_card_before_done(monkeypatch):
 
     assert "action" in kinds and kinds.index("action") < kinds.index("done")
     assert events[kinds.index("action")]["card"]["kind"] == "action"
+
+
+class GroundingStreamingClient:
+    def chat_stream(self, messages, tools=None):
+        yield {"type": "token", "text": "Đáp án đoán bừa."}
+        yield {"type": "message", "message": {"content": "Đáp án đoán bừa.", "tool_calls": []}}
+
+
+def test_student_course_stream_buffers_until_grounding_gate(monkeypatch):
+    monkeypatch.setattr("gateway.runtime.agent_loop.features.create_qa_escalation", lambda **kwargs: {"id": "esc-stream", "status": "open", **kwargs})
+    events = list(run_agent_stream(
+        GroundingStreamingClient(), ToolRegistry(), "student", "Tại sao đoạn code này lỗi?",
+        {"user": "student@example.com", "session_id": "chat-stream",
+         "route": {"kind": "lesson", "course": "PY-101", "lesson": "LESSON-1", "path": "/lms/courses/PY-101/learn/1-1"}, "current_lesson": {}},
+    ))
+    tokens = [event["text"] for event in events if event["t"] == "token"]
+    assert tokens == [events[-1]["answer"]]
+    assert "Đáp án đoán bừa" not in tokens[0]
+    assert "đã được chuyển cho giáo viên" in tokens[0]
+    assert events[-1]["escalations"][0]["id"] == "esc-stream"

@@ -430,6 +430,103 @@ def _model_error_message(exc: Exception) -> str:
     if "usage limit" in detail or "rate limit" in detail or "429" in detail or "503" in detail:
         return "Mô hình AI hiện tạm thời hết hạn mức hoặc chưa sẵn sàng. Vui lòng thử lại sau."
     return "Mô hình AI hiện không phản hồi. Vui lòng thử lại sau."
+def _plain_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", str(value or ""))
+    return " ".join(normalized.encode("ascii", "ignore").decode().casefold().split())
+
+
+def _student_course_question(role: str, user_msg: str, context: dict) -> bool:
+    """Identify learner Q&A turns that must be grounded in live course content."""
+    if role != "student":
+        return False
+    route = context.get("route") or {}
+    if not isinstance(route, dict) or route.get("kind") not in {"course", "lesson"}:
+        return False
+    raw = str(user_msg or "").strip()
+    text = _plain_text(raw)
+    if not text:
+        return False
+    if "?" in raw:
+        return True
+    return any(phrase in text for phrase in (
+        "la gi", "tai sao", "vi sao", "the nao", "nhu the nao", "giai thich",
+        "khong hieu", "cho vi du", "vi du", "bai nay", "doan nay", "code nay",
+        "loi nay", "lam sao", "what", "why", "how", "explain",
+    ))
+
+
+def _canonical_current_lesson_source(context: dict) -> str:
+    lesson = context.get("current_lesson") or {}
+    if not isinstance(lesson, dict):
+        return ""
+    body = str(lesson.get("body") or lesson.get("content") or "").strip()
+    if not body:
+        return ""
+    course = str(lesson.get("course") or (context.get("route") or {}).get("course") or "").strip()
+    title = str(lesson.get("title") or lesson.get("name") or "").strip()
+    if not course or not title:
+        return ""
+    return f"LMS Course: {course}, Course Lesson: {title}"
+
+
+def _collect_source_strings(value: object, out: list[str]) -> None:
+    if isinstance(value, dict):
+        source = value.get("source")
+        if isinstance(source, str):
+            source = source.strip()
+            if source.startswith("LMS Course:") or source.startswith("Course Lesson:"):
+                out.append(source)
+        for nested in value.values():
+            _collect_source_strings(nested, out)
+    elif isinstance(value, list):
+        for nested in value:
+            _collect_source_strings(nested, out)
+
+
+def _trusted_course_sources(context: dict, tool_calls: list) -> list[str]:
+    sources: list[str] = []
+    current = _canonical_current_lesson_source(context)
+    if current:
+        sources.append(current)
+    for item in tool_calls or []:
+        if isinstance(item, dict):
+            _collect_source_strings(item.get("result"), sources)
+    return list(dict.fromkeys(source for source in sources if source))
+
+
+def _ground_student_course_answer(answer: str, role: str, user_msg: str, context: dict, tool_calls: list) -> tuple[str, dict | None]:
+    """Enforce a server-side citation/escalation gate for learner course Q&A."""
+    answer = str(answer or "")
+    if not _student_course_question(role, user_msg, context):
+        return answer, None
+    sources = _trusted_course_sources(context, tool_calls)
+    if sources:
+        if not any(source in answer for source in sources):
+            route = context.get("route") or {}
+            path = str(route.get("path") or "") if isinstance(route, dict) else ""
+            citation = f"Nguồn: {sources[0]}"
+            if path:
+                citation += f" ({path})"
+            answer = answer.rstrip() + "\n\n" + citation
+        return answer, None
+    route = context.get("route") or {}
+    course = str(route.get("course") or "") if isinstance(route, dict) else ""
+    lesson = str(route.get("lesson") or "") if isinstance(route, dict) else ""
+    try:
+        escalation = features.create_qa_escalation(
+            member=str(context.get("user") or ""), session_id=str(context.get("session_id") or ""),
+            course=course, lesson=lesson, question=user_msg, reason="insufficient_approved_evidence",
+        )
+    except Exception:
+        escalation = None
+    suffix = f" Mã chuyển: {escalation['id']}." if escalation and escalation.get("id") else ""
+    return (
+        "Mình chưa có đủ căn cứ từ nội dung khóa học đã được duyệt để trả lời chắc chắn. "
+        "Câu hỏi này đã được chuyển cho giáo viên xem lại." + suffix,
+        escalation,
+    )
+
+
 def _agent_result(answer: str, tool_calls: list, approvals: list, timings: dict, context: dict) -> dict:
     tool_names = [str(item.get("tool") or "") for item in tool_calls if isinstance(item, dict)]
     run_id = str(context.get("_run_id") or "")
@@ -445,6 +542,7 @@ def _agent_result(answer: str, tool_calls: list, approvals: list, timings: dict,
         "run_id": run_id,
         "plan": context.get("_plan") or {},
         "reasoning_summary": summary_for_tools(tool_names),
+        "escalations": list(context.get("_escalations") or []),
     }
 
 
@@ -577,6 +675,8 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
     system = (
         "Bạn là gia sư LMS biết từng người học. Chỉ dùng tool được cấp. "
         "Mọi câu trả lời về khóa học phải kèm nguồn dạng `LMS Course: <tên>, Course Lesson: <tên>`. "
+        "Với học viên, chỉ trả lời câu hỏi nội dung khóa học khi có căn cứ từ bài học/khóa học chính thức đã nạp; "
+        "nếu không có đủ căn cứ thì không suy đoán và phải nói rõ là cần chuyển giáo viên. "
         "Với thống kê học viên/risk của teacher hoặc admin, dùng nguồn `engine ITS evidence/mastery`; "
         "không bịa nguồn LMS Course/Course Lesson và không ghi các placeholder như ‘Toàn bộ dữ liệu’ hoặc ‘Không áp dụng’. "
         "Không bịa đặt, không truy cập dữ liệu ngoài tool. "
@@ -671,7 +771,12 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
         calls = msg.get("tool_calls") or []
         if not calls:
             timings["total_ms"] = int((time.perf_counter() - t0) * 1000)
-            return _agent_result(msg.get("content") or "", tool_calls_log, approvals, timings, context)
+            answer, escalation = _ground_student_course_answer(
+                msg.get("content") or "", role, user_msg, context, tool_calls_log,
+            )
+            if escalation:
+                context.setdefault("_escalations", []).append(escalation)
+            return _agent_result(answer, tool_calls_log, approvals, timings, context)
 
         t_tools = time.perf_counter()
         for call in calls:
@@ -694,7 +799,12 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
             return _agent_result("Thao tác cần phê duyệt trước khi thực hiện.", tool_calls_log, approvals, timings, context)
 
     timings["total_ms"] = int((time.perf_counter() - t0) * 1000)
-    return _agent_result("Tôi đã tra cứu nhưng chưa đủ dữ liệu, bạn hỏi cụ thể hơn nhé.", tool_calls_log, approvals, timings, context)
+    answer, escalation = _ground_student_course_answer(
+        "Tôi đã tra cứu nhưng chưa đủ dữ liệu, bạn hỏi cụ thể hơn nhé.", role, user_msg, context, tool_calls_log,
+    )
+    if escalation:
+        context.setdefault("_escalations", []).append(escalation)
+    return _agent_result(answer, tool_calls_log, approvals, timings, context)
 
 
 def run_agent_stream(client, registry, role: str, user_msg: str, context: dict | None = None, effort: str = "auto"):
@@ -708,9 +818,12 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
     allowed = allowed_tools(role)
     plan = _prepare_run(context, user_msg, role)
     schemas = registry.schemas(allowed, set(plan.get("bundles") or []))
+    grounded_stream = _student_course_question(role, user_msg, context)
     system = (
         "Bạn là gia sư LMS biết từng người học. Chỉ dùng tool được cấp. "
         "Mọi câu trả lời về khóa học phải kèm nguồn dạng `LMS Course: <tên>, Course Lesson: <tên>`. "
+        "Với học viên, chỉ trả lời câu hỏi nội dung khóa học khi có căn cứ từ bài học/khóa học chính thức đã nạp; "
+        "nếu không có đủ căn cứ thì không suy đoán và phải nói rõ là cần chuyển giáo viên. "
         "Với thống kê học viên/risk của teacher hoặc admin, dùng nguồn `engine ITS evidence/mastery`; "
         "không bịa nguồn LMS Course/Course Lesson và không ghi các placeholder như ‘Toàn bộ dữ liệu’ hoặc ‘Không áp dụng’. "
         "Không bịa đặt, không truy cập dữ liệu ngoài tool. "
@@ -831,7 +944,8 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
                 if ev["type"] == "token":
                     if timings["ttft_ms"] is None:
                         timings["ttft_ms"] = int((time.perf_counter() - t0) * 1000)
-                    yield {"t": "token", "text": ev["text"]}
+                    if not grounded_stream:
+                        yield {"t": "token", "text": ev["text"]}
                 elif ev["type"] == "thought":
                     continue
                 elif ev["type"] == "message":
@@ -902,6 +1016,12 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
     else:
         answer = "Tôi đã tra cứu nhưng chưa đủ dữ liệu, bạn hỏi cụ thể hơn nhé."
 
+    if grounded_stream and not approvals:
+        answer, escalation = _ground_student_course_answer(answer, role, user_msg, context, tool_calls_log)
+        if escalation:
+            context.setdefault("_escalations", []).append(escalation)
+        yield {"t": "token", "text": answer}
+
     timings["total_ms"] = int((time.perf_counter() - t0) * 1000)
     run_id = str(context.get("_run_id") or "")
     if run_id and not approvals:
@@ -920,4 +1040,5 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
         "run_id": run_id,
         "plan": plan,
         "reasoning_summary": reasoning_summary,
+        "escalations": list(context.get("_escalations") or []),
     }
