@@ -263,9 +263,14 @@ def _previous_text(previous: dict | None, rewrite_of: str | None) -> str:
     if previous.get("review_note"):
         rows.append(f"Ghi chú của giáo viên (phải làm theo): {previous['review_note']}")
     if previous.get("message"):
-        rows.append(f"Lời nhắn cũ: {previous['message']}")
+        rows.append(f"Lời nhắn cũ của AI: {previous['message']}")
+    if previous.get("edited_message"):
+        rows.append(f"Lời nhắn giáo viên đã sửa (theo giọng này): {previous['edited_message']}")
     for score in previous.get("scores") or []:
-        rows.append(f"- Điểm cũ {score.get('criterion')}: level {score.get('level')} — {score.get('reason') or ''}")
+        row = f"- Điểm cũ {score.get('criterion')}: level {score.get('level')}"
+        if score.get("final_level") is not None and score.get("final_level") != score.get("level"):
+            row += f" (giáo viên sửa thành level {score['final_level']})"
+        rows.append(f"{row} — {score.get('reason') or ''}")
     return "\n".join(rows)
 
 
@@ -356,6 +361,11 @@ class ReviewWorker:
         """Bài học tới bài gắn với bài tập, theo mục lục khóa học (best effort)."""
         stage: dict = {"lessons": [], "lesson_ids": set(), "current": None}
         course, lesson = submission.get("course"), submission.get("lesson")
+        completed = [row for row in submission.get("completed_lessons") or [] if row.get("lesson")]
+        if completed:
+            # Bài học viên đã đánh dấu hoàn thành là căn cứ chính cho "không dùng kiến thức chưa học".
+            stage["lessons"] = [str(row.get("title") or row["lesson"]) for row in completed]
+            stage["lesson_ids"] = {row["lesson"] for row in completed}
         if not course or not lesson:
             return stage
         try:
@@ -371,7 +381,8 @@ class ReviewWorker:
                 if found:
                     break
             # Không thấy bài trong mục lục thì không đoán giai đoạn học.
-            stage["lessons"] = titles if found else []
+            if not completed:
+                stage["lessons"] = titles if found else []
         except Exception:
             log.warning("review: không đọc được mục lục khóa %s", course, exc_info=True)
         try:
@@ -381,27 +392,37 @@ class ReviewWorker:
                 for s in content.get("sections") or []
             )[:LESSON_CHARS]
             stage["current"] = {"lesson": lesson, "title": content.get("title") or lesson, "text": text}
-            stage["lesson_ids"] = {lesson}
+            stage["lesson_ids"] = set(stage["lesson_ids"]) | {lesson}
         except Exception:
             log.warning("review: không đọc được bài học %s", lesson, exc_info=True)
         return stage
 
-    def _previous(self, frappe, rewrite_of: str | None) -> dict | None:
-        """Bản nháp cũ + ghi chú giáo viên. lms_copilot chưa có tool cho Engine nên đọc REST (best effort)."""
+    def _previous(self, frappe, name: str, rewrite_of: str | None) -> dict | None:
+        """Bản nháp cũ + ghi chú viết lại của giáo viên, qua tool get_rewrite_context của lms_copilot."""
         if not rewrite_of:
             return None
         try:
-            doc = (frappe.get_document("Copilot Feedback Draft", rewrite_of) or {}).get("data") or {}
+            context = frappe.call_copilot_tool(
+                "get_rewrite_context", {"project_submission": name, "rewrite_of": rewrite_of}
+            ) or {}
         except Exception:
             log.warning("review: không đọc được bản nháp %s", rewrite_of, exc_info=True)
             return None
+        previous = context.get("previous") or {}
+        teacher = context.get("teacher") or {}
+        final_levels = {
+            row.get("criterion"): row.get("final_level")
+            for row in teacher.get("edited_levels") or []
+            if row.get("final_level") is not None
+        }
         return {
-            "message": doc.get("message"),
-            "review_note": doc.get("review_note"),
+            "message": previous.get("message"),
+            "review_note": teacher.get("note"),
+            "edited_message": teacher.get("edited_message"),
             "scores": [
-                {"criterion": s.get("criterion"), "level": s.get("final_level") or s.get("level"),
-                 "reason": s.get("reason")}
-                for s in doc.get("scores") or []
+                {"criterion": s.get("criterion"), "level": s.get("level"),
+                 "final_level": final_levels.get(s.get("criterion")), "reason": s.get("reason")}
+                for s in previous.get("scores") or []
             ],
         }
 
@@ -465,7 +486,7 @@ class ReviewWorker:
                               status=review_jobs.MANUAL)
 
         stage = self._stage(frappe, submission)
-        previous = self._previous(frappe, rewrite_of)
+        previous = self._previous(frappe, name, rewrite_of)
         messages = build_messages(assignment, stage, snap, run, previous, rewrite_of,
                                   int(self.config.review_prompt_chars))
         model = job.get("model") or self.config.llm_model

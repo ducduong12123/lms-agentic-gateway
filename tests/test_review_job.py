@@ -78,6 +78,10 @@ class FakeFrappe:
         self.calls.append((tool, arguments, kwargs))
         if tool in self.fail_tools:
             raise RuntimeError("Frappe HTTP 500: boom")
+        if tool == "get_rewrite_context":
+            if self.draft is None:
+                raise RuntimeError("Frappe HTTP 403")
+            return self.draft
         if tool == "get_submission":
             return {"project_submission": "CPS-1", "assignment": "ASG-1", "course": "PY-101",
                     "lesson": "LES-2", "repo_url": "https://github.com/learner/calc", "commit": None,
@@ -96,11 +100,6 @@ class FakeFrappe:
         if tool == "propose_feedback":
             return {"draft": "CFD-1", "status": "Pending Review"}
         return {"ok": True}
-
-    def get_document(self, doctype, name):
-        if self.draft is None:
-            raise RuntimeError("Frappe HTTP 403")
-        return {"data": self.draft}
 
     def tool_calls(self, tool):
         return [call for call in self.calls if call[0] == tool]
@@ -303,13 +302,34 @@ def test_boundary_in_learner_code_is_neutralised():
 
 def test_rewrite_includes_previous_draft_and_teacher_note(monkeypatch):
     fake_github(monkeypatch, make_tarball(FILES))
-    draft = {"message": "Lời nhắn cũ", "review_note": "Nhẹ nhàng hơn và nói về test",
-             "scores": [{"criterion": "Code sạch", "level": 1, "final_level": 1, "reason": "cũ"}]}
+    draft = {
+        "previous": {"message": "Lời nhắn cũ",
+                     "scores": [{"criterion": "Code sạch", "level": 1, "reason": "cũ"}]},
+        "teacher": {"note": "Nhẹ nhàng hơn và nói về test", "edited_message": None,
+                    "edited_levels": [{"criterion": "Code sạch", "level": 1, "final_level": 2}]},
+    }
     frappe, llm = FakeFrappe(draft=draft), FakeLLM(good_feedback())
     run_job(frappe, llm, rewrite_of="CFD-0")
     prompt = llm.requests[0][1]["content"]
     assert "VIẾT LẠI" in prompt and "Nhẹ nhàng hơn và nói về test" in prompt
+    assert "giáo viên sửa thành level 2" in prompt
     assert prompt.index("Nhẹ nhàng hơn") < prompt.index("<<<BAI_NOP ")
+    assert frappe.tool_calls("get_rewrite_context")[0][1] == {"project_submission": "CPS-1", "rewrite_of": "CFD-0"}
+
+
+def test_completed_lessons_define_the_learning_stage():
+    class Frappe:
+        def call_copilot_tool(self, tool, arguments=None, **kwargs):
+            if tool == "get_course_outline":
+                return {"chapters": [{"lessons": [{"lesson": "L1", "number": "1.1", "title": "Biến"},
+                                                  {"lesson": "L3", "number": "1.3", "title": "try/except"}]}]}
+            return {"title": "Dự án", "sections": []}
+
+    worker = review_worker.ReviewWorker.__new__(review_worker.ReviewWorker)
+    stage = worker._stage(Frappe(), {"course": "PY", "lesson": "L3",
+                                     "completed_lessons": [{"lesson": "L1", "title": "Biến"}]})
+    assert stage["lessons"] == ["Biến"]
+    assert stage["lesson_ids"] == {"L1", "L3"}
 
 
 def test_missing_rubric_flags_manual_without_calling_llm(monkeypatch):
