@@ -126,6 +126,8 @@ def prompt_block(context: dict) -> str:
     ]
     if course:
         lines.append(f"- Khóa học hiện tại: course={course}" + (f"; bài đang mở: lesson={lesson}." if lesson else "."))
+        lines.append("- Hệ thống đã biết khóa học và bài học từ trang đang mở: KHÔNG hỏi học viên tên khóa "
+                     "hay tên bài.")
     pending = [str(item) for item in context.get("pending_assignments") or [] if item]
     if pending:
         lines.append(
