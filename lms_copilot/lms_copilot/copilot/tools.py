@@ -112,9 +112,22 @@ TOOLS = [
 		"get_submission",
 		READ,
 		frozenset({TEACHER, REVIEWER, ENGINE}),
-		"A project submission: repository, commit, test results and attempt number.",
+		"A project submission: repository, commit, test results, attempt number and completed lessons.",
 		_schema(["project_submission"], project_submission=_string("Copilot Project Submission name.")),
 		read_tools.get_submission,
+	),
+	Tool(
+		"get_rewrite_context",
+		READ,
+		frozenset({TEACHER, REVIEWER, ENGINE}),
+		"For a rewrite job: the previous feedback draft (scores, reasons, citations, message) and the "
+		"teacher's rewrite note and edits. Use it to address exactly what the teacher asked for.",
+		_schema(
+			["project_submission", "rewrite_of"],
+			project_submission=_string("Copilot Project Submission being reviewed."),
+			rewrite_of=_string("Copilot Feedback Draft the teacher sent back."),
+		),
+		read_tools.get_rewrite_context,
 	),
 	Tool(
 		"get_learner_progress",

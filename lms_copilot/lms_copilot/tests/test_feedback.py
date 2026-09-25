@@ -186,3 +186,75 @@ class TestProjectFeedback(CopilotTestCase):
 			frappe.db.get_value("Copilot Project Submission", project, "status"), "Rewrite Requested"
 		)
 		self.assertNotIn(draft, [row["name"] for row in queue.get_review_queue()["rows"]])
+
+	def test_rewrite_context_gives_the_engine_the_draft_and_teacher_note(self):
+		project = self._submit()
+		draft = self._draft(project)
+		self.as_user(self.instructor)
+		feedback.save_feedback_draft(draft, scores={"Chức năng": 3}, message="Bản giáo viên sửa")
+		feedback.request_rewrite(draft, "Chỉ rõ dòng 19 và bớt gay gắt")
+
+		self.as_user(self.engine)
+		context = tools.call("get_rewrite_context", {"project_submission": project, "rewrite_of": draft})
+
+		self.assertEqual(context["rewrite_of"], draft)
+		self.assertTrue(context["learner"].startswith("L-"))
+		self.assertNotIn(self.learner.email, frappe.as_json(context))
+		previous = context["previous"]
+		self.assertEqual(previous["status"], "Rewrite Requested")
+		self.assertEqual(
+			[row["criterion"] for row in previous["scores"]], ["Chức năng", "Dùng hook đúng cách"]
+		)
+		self.assertEqual(previous["scores"][0]["citations"][0]["line_start"], 19)
+		teacher = context["teacher"]
+		self.assertEqual(teacher["note"], "Chỉ rõ dòng 19 và bớt gay gắt")
+		self.assertEqual(teacher["requested_by"], self.instructor.email)
+		self.assertEqual(teacher["edited_message"], "Bản giáo viên sửa")
+		self.assertEqual(teacher["edited_levels"], [{"criterion": "Chức năng", "level": 2, "final_level": 3}])
+		self.assertTrue(
+			frappe.db.exists(
+				"Copilot Tool Log",
+				{"tool": "get_rewrite_context", "user": self.engine.email, "status": "Success"},
+			)
+		)
+
+	def test_rewrite_context_only_reads_drafts_of_the_same_learner_and_assignment(self):
+		project = self._submit()
+		draft = self._draft(project)
+		frappe.set_user("Administrator")
+		self._track(
+			frappe.get_doc(
+				{"doctype": "LMS Enrollment", "course": self.course.name, "member": self.stranger.email}
+			).insert(ignore_permissions=True)
+		)
+		self.as_user(self.stranger)
+		other = feedback.submit_project(self.assignment.name, "https://github.com/someone/other")
+		other = other["project_submission"]
+		self.cleanup_items.append(
+			(
+				"LMS Assignment Submission",
+				frappe.db.get_value("Copilot Project Submission", other, "assignment_submission"),
+			)
+		)
+
+		self.as_user(self.engine)
+		with self.assertRaises(frappe.PermissionError):
+			tools.call("get_rewrite_context", {"project_submission": other, "rewrite_of": draft})
+		self.as_user(self.learner)
+		with self.assertRaises(frappe.PermissionError):
+			tools.call("get_rewrite_context", {"project_submission": project, "rewrite_of": draft})
+
+	def test_submission_lists_completed_lessons(self):
+		project = self._submit()
+		self.as_user(self.engine)
+		self.assertEqual(
+			tools.call("get_submission", {"project_submission": project})["completed_lessons"], []
+		)
+
+		frappe.set_user("Administrator")
+		progress = self._create_progress(self.learner.email, self.course.name, self.lesson.name)
+		progress.db_set("status", "Complete")
+
+		self.as_user(self.engine)
+		lessons = tools.call("get_submission", {"project_submission": project})["completed_lessons"]
+		self.assertEqual(lessons, [{"lesson": self.lesson.name, "title": self.lesson.title}])

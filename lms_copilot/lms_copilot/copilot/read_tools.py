@@ -219,6 +219,84 @@ def get_submission(project_submission):
 			"Copilot Project Submission",
 			{"assignment": doc.assignment, "member": doc.member, "creation": ["<=", doc.creation]},
 		),
+		"completed_lessons": completed_lessons(doc.course, doc.member),
+	}
+
+
+def completed_lessons(course, member):
+	"""Lessons the learner finished, in outline order, so feedback only builds on what was taught."""
+	if not course or not member:
+		return []
+	done = set(
+		frappe.get_all(
+			"LMS Course Progress",
+			filters={"course": course, "member": member, "status": "Complete"},
+			pluck="lesson",
+		)
+	)
+	if not done:
+		return []
+	titles = dict(
+		frappe.get_all(
+			"Course Lesson", filters={"name": ["in", list(done)]}, fields=["name", "title"], as_list=True
+		)
+	)
+	ordered = [lesson for lesson in _course_lessons(course) if lesson in done]
+	ordered += sorted(done - set(ordered))
+	return [{"lesson": lesson, "title": titles.get(lesson)} for lesson in ordered if lesson in titles]
+
+
+def get_rewrite_context(project_submission, rewrite_of):
+	"""The draft a teacher sent back, with their note and edits, for the review agent's rewrite."""
+	name = existing("Copilot Project Submission", project_submission, _("Project submission"))
+	project = frappe.get_doc("Copilot Project Submission", name)
+	access.assert_engine_or_reviewer(project.course)
+	draft_name = existing("Copilot Feedback Draft", rewrite_of, _("Feedback draft"))
+	draft = frappe.get_doc("Copilot Feedback Draft", draft_name)
+	if draft.assignment != project.assignment or draft.member != project.member:
+		frappe.throw(
+			_("That feedback draft does not belong to this learner's submissions for the assignment."),
+			frappe.PermissionError,
+		)
+	reviewer = draft.reviewed_by
+	return {
+		"project_submission": project.name,
+		"rewrite_of": draft.name,
+		"assignment": project.assignment,
+		"learner": access.learner_ref(project.member),
+		"previous": {
+			"project_submission": draft.project_submission,
+			"status": draft.status,
+			"confidence": draft.confidence,
+			"model": draft.model,
+			"drafted_on": draft.creation,
+			"message": draft.message,
+			"scores": [
+				{
+					"criterion": row.criterion,
+					"max_level": cint(row.max_level) or 3,
+					"level": cint(row.level),
+					"confidence": row.confidence,
+					"reason": row.reason,
+					"citations": load_json(row.citations, []),
+				}
+				for row in draft.scores
+			],
+		},
+		"teacher": {
+			"note": draft.review_note,
+			"requested_by": reviewer,
+			"requested_by_name": frappe.db.get_value("User", reviewer, "full_name") if reviewer else None,
+			"requested_on": draft.reviewed_on,
+			"edited_message": draft.final_message
+			if draft.final_message and draft.final_message != draft.message
+			else None,
+			"edited_levels": [
+				{"criterion": row.criterion, "level": cint(row.level), "final_level": cint(row.final_level)}
+				for row in draft.scores
+				if row.final_level and cint(row.final_level) != cint(row.level)
+			],
+		},
 	}
 
 
