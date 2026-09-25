@@ -51,7 +51,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Type",
-   "options": "Lesson Quiz\nLesson Change\nLearner Reminder\nEscalation\nRubric",
+   "options": "Lesson Quiz\nLesson Change\nLearner Reminder\nEscalation\nRubric\nCourse Draft",
    "reqd": 1
   },
   {
@@ -220,7 +220,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-25 09:00:00.000000",
+ "modified": "2026-09-25 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "LMS Copilot",
  "name": "Copilot Proposal",

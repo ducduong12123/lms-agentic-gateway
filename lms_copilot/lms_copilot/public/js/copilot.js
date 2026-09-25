@@ -198,11 +198,14 @@
 		'Learner Reminder': () => __('Learner reminder'),
 		Escalation: () => __('Question for you'),
 		Rubric: () => __('Rubric'),
+		'Course Draft': () => __('Course draft'),
 	}
 
 	const STATUS_TONE = {
 		Pending: 'warn',
 		'Pending Review': 'warn',
+		Queued: 'warn',
+		Ready: 'ok',
 		Approved: 'ok',
 		Applied: 'ok',
 		'Feedback Sent': 'ok',
@@ -223,7 +226,7 @@
 
 	function shell(crumbs, ...content) {
 		const nav = [h('a', { href: '/lms', class: 'nav-link' }, __('Back to LMS'))]
-		if (state.session && state.session.is_teacher) nav.unshift(link('', __('Review queue')))
+		if (state.session && state.session.is_teacher) nav.unshift(link('', __('Review queue')), link('import', __('New course from documents')))
 		return [
 			h(
 				'header',
@@ -633,8 +636,31 @@
 		let replyBox = null
 		const body = []
 
+		let missingChoice = null
 		if (data.summary) body.push(h('p', null, data.summary))
-		if (preview.kind === 'diff') {
+		if (preview.kind === 'course') {
+			body.push(courseView(preview))
+			if (open && preview.missing) {
+				missingChoice = h(
+					'select',
+					{ class: 'input', 'aria-label': __('Lessons without source material') },
+					h('option', { value: '' }, __('Choose what to do with them…')),
+					h('option', { value: 'keep' }, __('Keep them, marked for me to complete')),
+					h('option', { value: 'drop' }, __('Drop them from the course'))
+				)
+				body.push(
+					h(
+						'label',
+						{ class: 'field box' },
+						h('b', null, __('{0} lesson(s) have no source material in your documents.', [preview.missing])),
+						missingChoice
+					)
+				)
+			}
+			if (data.status === 'Applied' && data.result && data.result.course) {
+				body.push(h('p', null, h('a', { href: '/lms/courses/' + encodeURIComponent(data.result.course) }, __('Open the new course (unpublished)'))))
+			}
+		} else if (preview.kind === 'diff') {
 			body.push(diffView(preview.lines || []))
 			if (data.type === 'Lesson Change' && open) {
 				editor = h('textarea', { class: 'input mono', rows: 10, hidden: true, 'aria-label': __('Lesson text') })
@@ -658,6 +684,7 @@
 
 		const approveParams = () => {
 			if (replyBox) return { reply: replyBox.value }
+			if (missingChoice) return { missing_lessons: missingChoice.value }
 			if (editor && data.type === 'Lesson Change' && !editor.hidden) return { ...params, markdown: editor.value }
 			if (editor && data.type === 'Learner Reminder') return { ...params, message: editor.value }
 			return null
@@ -668,6 +695,11 @@
 					button(data.type === 'Escalation' ? __('Send reply') : __('Approve and apply'), async () => {
 						if (replyBox && !replyBox.value.trim()) {
 							replyBox.focus()
+							return
+						}
+						if (missingChoice && !missingChoice.value) {
+							missingChoice.focus()
+							toast(__('Choose what to do with the lessons that have no source material.'), 'error')
 							return
 						}
 						const result = await run(() => api('approve_proposal', { name, params: approveParams() }, true))
@@ -718,6 +750,176 @@
 					body,
 					data.result && data.status === 'Applied' ? h('p', { class: 'muted small' }, __('Re-read after applying: the change is in place.')) : null,
 					h('div', { class: 'row wrap footer' }, actions)
+				)
+			)
+		)
+	}
+
+	function courseView(preview) {
+		const lessonItem = (lesson) =>
+			h(
+				'li',
+				{ class: 'outline-lesson' + (lesson.missing_material ? ' missing' : '') },
+				h(
+					'details',
+					null,
+					h(
+						'summary',
+						null,
+						h('b', null, lesson.number + ' ' + lesson.title),
+						' ',
+						lesson.missing_material ? chip(__('Missing material'), 'danger') : lesson.sources.map((source) => chip(source, 'muted'))
+					),
+					h('pre', { class: 'code lesson-text' }, lesson.markdown)
+				)
+			)
+		return h(
+			'div',
+			{ class: 'stack course-draft' },
+			h('h2', null, preview.title),
+			preview.introduction ? h('p', { class: 'muted' }, preview.introduction) : null,
+			preview.files && preview.files.length ? h('p', { class: 'small muted' }, __('From: {0}', [preview.files.join(', ')])) : null,
+			preview.chapters.map((chapter) => h('section', null, h('h3', null, __('Chapter {0}: {1}', [chapter.number, chapter.title])), h('ol', { class: 'list outline' }, chapter.lessons.map(lessonItem)))),
+			preview.assignments.length
+				? [
+						h('h3', null, __('Assignments and rubrics')),
+						preview.assignments.map((item) =>
+							h(
+								'div',
+								{ class: 'card' },
+								h('b', null, item.title),
+								' ',
+								item.after_lesson ? chip(__('After lesson {0}', [item.after_lesson]), 'ai') : null,
+								' ',
+								item.sources.map((source) => chip(source, 'muted')),
+								h('pre', { class: 'code lesson-text' }, item.question),
+								h(
+									'ul',
+									{ class: 'list' },
+									item.criteria.map((row) =>
+										h('li', null, h('b', null, row.criterion), ' (1–' + row.max_level + ')', row.description ? ' — ' + row.description : '', row.taught_in_lesson ? ' · ' + __('taught in {0}', [row.taught_in_lesson]) : '')
+									)
+								)
+							)
+						),
+				  ]
+				: null
+		)
+	}
+
+	// ----------------------------------------------------------------- import
+
+	const IMPORT_ACCEPT = '.pdf,.docx,.pptx,.md,.markdown,.txt'
+
+	async function uploadFile(file) {
+		const form = new FormData()
+		form.append('file', file, file.name)
+		const response = await fetch('/api/method/lms_copilot.api.upload_course_source', { method: 'POST', headers: { Accept: 'application/json', 'X-Frappe-CSRF-Token': CSRF }, body: form })
+		const data = await response.json().catch(() => ({}))
+		if (!response.ok) throw new Error(serverMessage(data) || __('Could not upload {0}.', [file.name]))
+		return data.message.file_url
+	}
+
+	async function renderImports() {
+		const imports = await api('list_course_imports')
+		const title = h('input', { class: 'input', required: true, maxlength: 140, 'aria-label': __('Course title'), placeholder: __('e.g. Python for beginners') })
+		const brief = h('textarea', { class: 'input', rows: 3, 'aria-label': __('Brief'), placeholder: __('Audience, goals, and topics the outline must cover (optional)') })
+		const files = h('input', { class: 'input', type: 'file', multiple: true, accept: IMPORT_ACCEPT, 'aria-label': __('Documents') })
+		const submit = button(__('Draft the course'), async () => {
+			if (!title.value.trim()) return title.focus()
+			if (!files.files.length) return files.focus()
+			submit.disabled = true
+			submit.textContent = __('Uploading…')
+			const result = await run(async () => {
+				const urls = []
+				for (const file of files.files) urls.push(await uploadFile(file))
+				return api('create_course_import', { title: title.value.trim(), brief: brief.value.trim(), files: urls }, true)
+			})
+			submit.disabled = false
+			submit.textContent = __('Draft the course')
+			if (result) go('import/' + encodeURIComponent(result.name))
+		}, 'primary')
+
+		paint(
+			shell(
+				[link('', __('Review queue')), ' / ', h('b', null, __('New course from documents'))],
+				h('h1', null, __('New course from documents')),
+				h('p', { class: 'lead muted' }, __('Upload the slides, syllabus, exercises and grading criteria you already have. The assistant drafts chapters, lessons, assignments and rubrics that cite your pages. Nothing is created until you approve the draft.')),
+				h(
+					'section',
+					{ class: 'card stack' },
+					h('label', { class: 'field' }, h('span', null, __('Course title')), title),
+					h('label', { class: 'field' }, h('span', null, __('Documents (PDF, DOCX, PPTX, Markdown, text; up to 10 files)')), files),
+					h('label', { class: 'field' }, h('span', null, __('Brief for the assistant')), brief),
+					h('div', { class: 'row end' }, submit)
+				),
+				imports.length
+					? [
+							h('h2', null, __('Earlier imports')),
+							h(
+								'div',
+								{ class: 'card flush' },
+								h(
+									'table',
+									{ class: 'table' },
+									h('tbody', null, imports.map((row) => h('tr', null, h('td', null, link('import/' + encodeURIComponent(row.name), row.title)), h('td', null, row.sources.map((source) => source.file_name).join(', ')), h('td', null, statusChip(row.status)), h('td', { class: 'muted small nowrap' }, formatDate(row.created)))))
+								)
+							),
+					  ]
+					: null
+			)
+		)
+	}
+
+	async function renderImport(name) {
+		const data = await api('get_course_import', { name })
+		const path = location.pathname
+		if (data.status === 'Queued') {
+			setTimeout(() => location.pathname === path && render(), 5000)
+		}
+		const proposal = data.proposal
+		const next =
+			data.status === 'Queued'
+				? h('p', { class: 'box' }, __('The assistant is reading your documents and drafting the course. This usually takes one to three minutes; the page refreshes by itself.'))
+				: proposal
+				? h(
+						'p',
+						{ class: 'row wrap' },
+						statusChip(proposal.status),
+						link('proposal/' + encodeURIComponent(proposal.name), proposal.status === 'Pending' ? __('Review the course draft') : __('Open the course draft')),
+						data.course ? h('a', { href: '/lms/courses/' + encodeURIComponent(data.course) }, __('Open the new course (unpublished)')) : null
+				  )
+				: null
+		const retry =
+			data.status === 'Failed' || (proposal && ['Rejected', 'Expired', 'Failed'].includes(proposal.status))
+				? button(__('Draft again'), async () => {
+						if (await run(() => api('retry_course_import', { name }, true), __('Queued again.'))) render()
+				  })
+				: null
+
+		paint(
+			shell(
+				[link('import', __('New course from documents')), ' / ', h('b', null, data.title)],
+				h(
+					'section',
+					{ class: 'card stack' },
+					h('div', { class: 'row wrap' }, h('h1', null, data.title), statusChip(data.status)),
+					data.brief ? h('blockquote', { class: 'quote' }, data.brief) : null,
+					data.error ? h('p', { class: 'alert' }, data.error) : null,
+					next,
+					h(
+						'table',
+						{ class: 'table' },
+						h('thead', null, h('tr', null, [__('Source'), __('File'), __('Extracted'), ''].map((label) => h('th', null, label)))),
+						h(
+							'tbody',
+							null,
+							data.sources.map((source) =>
+								h('tr', null, h('td', null, source.source), h('td', null, source.file_name || source.file_url), h('td', null, source.error ? '—' : __('{0} {1}(s), {2} characters', [source.pages, __(source.unit), source.chars])), h('td', null, source.error ? h('span', { class: 'alert small' }, source.error) : null))
+							)
+						)
+					),
+					h('div', { class: 'row wrap footer' }, retry)
 				)
 			)
 		)
@@ -884,6 +1086,7 @@
 			if (screen === 'review' && id) return await renderReview(id)
 			if (screen === 'proposal' && id) return await renderProposal(id)
 			if (screen === 'insight' && id) return await renderInsight(id)
+			if (screen === 'import') return await (id ? renderImport(id) : renderImports())
 			return await renderQueue(kind)
 		} catch (error) {
 			message(__('This page could not be loaded'), error.message)

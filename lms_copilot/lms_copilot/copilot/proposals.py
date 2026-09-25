@@ -11,6 +11,7 @@ On approval the reviewer's own permission is checked again, the source record
 is compared with the version the agent read, and only then does the write run.
 """
 
+import re
 import time
 
 import frappe
@@ -429,9 +430,421 @@ class Rubric(ProposalType):
 		)
 
 
+MAX_DRAFT_CHAPTERS = 15
+MAX_DRAFT_LESSONS = 60
+MAX_LESSON_SOURCES = 8
+MAX_DRAFT_ASSIGNMENTS = 10
+MISSING_CHOICES = ("keep", "drop")
+LESSON_NUMBER = re.compile(r"^\s*(?:L\s*)?(\d+)\.(\d+)\s*$")
+LESSON_KEY = re.compile(r"^L\d+$")
+
+
+def _page_label(entry, pages):
+	file_name, unit, _pages = entry
+	unit = {"page": _("p."), "slide": _("slide"), "section": _("section")}.get(unit, "")
+	return f"{file_name} {unit} {', '.join(str(page) for page in pages)}"
+
+
+def _draft_sources(items, index):
+	"""Keep citations of pages that exist in the import; anything else is dropped, not trusted."""
+	refs = []
+	for item in items if isinstance(items, list) else []:
+		if not isinstance(item, dict):
+			continue
+		source = str(item.get("source") or "").strip()
+		if source not in index:
+			continue
+		pages = item.get("pages") if isinstance(item.get("pages"), list) else [item.get("page")]
+		for page in pages:
+			if isinstance(page, bool):
+				continue
+			try:
+				page = int(page)
+			except (TypeError, ValueError):
+				continue
+			ref = {"source": source, "page": page}
+			if page in index[source][2] and ref not in refs:
+				refs.append(ref)
+	return refs[:MAX_LESSON_SOURCES]
+
+
+def _source_labels(refs, index):
+	by_source = {}
+	for ref in refs:
+		by_source.setdefault(ref["source"], []).append(ref["page"])
+	return [_page_label(index[source], sorted(pages)) for source, pages in by_source.items()]
+
+
+def _lesson_key(value, keys):
+	"""A lesson named by key (L3) or outline number (2.1)."""
+	value = str(value or "").strip()
+	if value in keys.values():
+		return value
+	match = LESSON_NUMBER.match(value)
+	return keys.get((int(match.group(1)), int(match.group(2)))) if match else None
+
+
+class CourseDraft(ProposalType):
+	"""A whole course drafted from the teacher's documents. Nothing exists until approval."""
+
+	label = "Course Draft"
+	tool = "propose_course_draft"
+	audiences = frozenset({access.TEACHER, access.ENGINE})
+	locked_keys = ("course_import",)
+
+	def _import(self, name):
+		from lms_copilot.copilot import course_import
+
+		doc = course_import.get_import(name)
+		if doc.course:
+			fail(_("A course was already created from this import."))
+		return doc, course_import.page_index(doc)
+
+	def _outline(self, params, index):
+		chapters_in = parse_list(params.get("chapters"), _("Chapters"), minimum=1, maximum=MAX_DRAFT_CHAPTERS)
+		used = {
+			str(lesson.get("key"))
+			for chapter in chapters_in
+			if isinstance(chapter, dict)
+			for lesson in (chapter.get("lessons") if isinstance(chapter.get("lessons"), list) else [])
+			if isinstance(lesson, dict) and LESSON_KEY.match(str(lesson.get("key") or ""))
+		}
+		next_key = max([int(key[1:]) for key in used] or [0])
+		chapters, keys, seen, total = [], {}, set(), 0
+		for chapter_number, chapter in enumerate(chapters_in, 1):
+			if not isinstance(chapter, dict):
+				fail(_("Chapter {0} must be an object.").format(chapter_number))
+			lessons_in = parse_list(
+				chapter.get("lessons"), _("Lessons of chapter {0}").format(chapter_number), minimum=1
+			)
+			lessons = []
+			for lesson_number, lesson in enumerate(lessons_in, 1):
+				total += 1
+				if total > MAX_DRAFT_LESSONS:
+					fail(_("A course draft can have at most {0} lessons.").format(MAX_DRAFT_LESSONS))
+				label = _("Lesson {0}.{1}").format(chapter_number, lesson_number)
+				if not isinstance(lesson, dict):
+					fail(_("{0} must be an object.").format(label))
+				key = str(lesson.get("key") or "")
+				if not LESSON_KEY.match(key) or key in seen:
+					next_key += 1
+					key = f"L{next_key}"
+				seen.add(key)
+				keys[(chapter_number, lesson_number)] = key
+				sources = _draft_sources(lesson.get("sources"), index)
+				lessons.append(
+					{
+						"key": key,
+						"title": required_text(lesson.get("title"), label, 140),
+						"markdown": required_text(lesson.get("markdown"), _("{0} content").format(label), MAX_MARKDOWN),
+						"sources": sources,
+						"missing_material": not sources,
+					}
+				)
+			chapters.append(
+				{
+					"title": required_text(chapter.get("title"), _("Chapter {0}").format(chapter_number), 140),
+					"lessons": lessons,
+				}
+			)
+		return chapters, keys
+
+	def _assignments(self, params, keys, index):
+		items = parse_list(params.get("assignments") or [], _("Assignments"), maximum=MAX_DRAFT_ASSIGNMENTS)
+		assignments = []
+		for number, item in enumerate(items, 1):
+			label = _("Assignment {0}").format(number)
+			if not isinstance(item, dict):
+				fail(_("{0} must be an object.").format(label))
+			lesson = _lesson_key(item.get("lesson") or item.get("after_lesson"), keys)
+			if not lesson:
+				fail(_("{0} must name the lesson it follows, for example 2.1.").format(label))
+			rubric = item.get("rubric")
+			rubric = rubric if isinstance(rubric, dict) else {"criteria": rubric}
+			criteria_in = parse_list(
+				rubric.get("criteria"), _("{0} rubric").format(label), minimum=1, maximum=MAX_RUBRIC_CRITERIA
+			)
+			criteria = []
+			for index_, criterion in enumerate(criteria_in, 1):
+				if not isinstance(criterion, dict):
+					fail(_("Criterion {0} must be an object.").format(index_))
+				row = _criterion({**criterion, "taught_in_lesson": None}, index_, None)
+				row["taught_in_lesson"] = _lesson_key(criterion.get("taught_in_lesson"), keys)
+				criteria.append(row)
+			names = [row["criterion"] for row in criteria]
+			if len(set(names)) != len(names):
+				fail(_("{0}: each criterion needs a different name.").format(label))
+			assignments.append(
+				{
+					"title": required_text(item.get("title"), label, 140),
+					"question": required_text(item.get("question"), _("{0} brief").format(label), 10000),
+					"lesson": lesson,
+					"sources": _draft_sources(item.get("sources"), index),
+					"rubric": {
+						"title": optional_text(rubric.get("title"), _("Rubric title"), 140)
+						or required_text(item.get("title"), label, 140),
+						"criteria": criteria,
+						"notes": optional_text(rubric.get("notes"), _("Rubric notes"), 4000),
+					},
+				}
+			)
+		return assignments
+
+	def _preview(self, clean, index):
+		numbers = {}
+		chapters = []
+		for chapter_number, chapter in enumerate(clean["chapters"], 1):
+			lessons = []
+			for lesson_number, lesson in enumerate(chapter["lessons"], 1):
+				numbers[lesson["key"]] = f"{chapter_number}.{lesson_number}"
+				lessons.append(
+					{
+						"key": lesson["key"],
+						"number": numbers[lesson["key"]],
+						"title": lesson["title"],
+						"markdown": lesson["markdown"],
+						"sources": _source_labels(lesson["sources"], index),
+						"missing_material": lesson["missing_material"],
+					}
+				)
+			chapters.append({"number": chapter_number, "title": chapter["title"], "lessons": lessons})
+		return {
+			"kind": "course",
+			"title": clean["title"],
+			"introduction": clean["short_introduction"],
+			"description": clean["description"],
+			"chapters": chapters,
+			"assignments": [
+				{
+					"title": item["title"],
+					"question": item["question"],
+					"after_lesson": numbers.get(item["lesson"]),
+					"sources": _source_labels(item["sources"], index),
+					"criteria": [
+						{
+							"criterion": row["criterion"],
+							"max_level": row["max_level"],
+							"description": row["description"],
+							"taught_in_lesson": numbers.get(row["taught_in_lesson"]),
+						}
+						for row in item["rubric"]["criteria"]
+					],
+				}
+				for item in clean["assignments"]
+			],
+			"missing": sum(lesson["missing_material"] for chapter in clean["chapters"] for lesson in chapter["lessons"]),
+			"files": [entry[0] for entry in index.values()],
+		}
+
+	def prepare(self, params):
+		params = parse_object(params, _("Parameters"))
+		doc, index = self._import(params.get("course_import"))
+		if not index:
+			fail(_("The import has no extracted text to build a course from."))
+		chapters, keys = self._outline(params, index)
+		clean = {
+			"course_import": doc.name,
+			"title": optional_text(params.get("title"), _("Course title"), 140) or doc.title,
+			"short_introduction": required_text(params.get("short_introduction"), _("Short introduction"), 500),
+			"description": optional_text(params.get("description"), _("Description"), 8000) or "",
+			"chapters": chapters,
+			"assignments": self._assignments(params, keys, index),
+			"reason": optional_text(params.get("reason"), _("Reason"), 1000),
+		}
+		lessons = [lesson for chapter in chapters for lesson in chapter["lessons"]]
+		missing = sum(lesson["missing_material"] for lesson in lessons)
+		summary = _("{0} chapter(s), {1} lesson(s), {2} assignment(s) with rubric from {3} file(s).").format(
+			len(chapters), len(lessons), len(clean["assignments"]), len(index)
+		)
+		if missing:
+			summary += " " + _("{0} lesson(s) have no source material.").format(missing)
+		if clean["reason"]:
+			summary += " " + clean["reason"]
+		return {
+			"course": None,
+			"reference_doctype": "Copilot Course Import",
+			"reference_name": doc.name,
+			"title": _("Create course “{0}” from {1} file(s)").format(clean["title"], len(index)),
+			"summary": summary,
+			"params": clean,
+			"preview": self._preview(clean, index),
+		}
+
+	def normalise(self, params, proposal):
+		params = parse_object(params, _("Parameters"))
+		original = load_json(proposal.params, {})
+		choice = params.get("missing_lessons")
+		merged = {**original, **{key: value for key, value in params.items() if key != "missing_lessons"}}
+		merged["course_import"] = original.get("course_import")
+		clean = self.prepare(merged)["params"]
+		missing = [lesson for chapter in clean["chapters"] for lesson in chapter["lessons"] if lesson["missing_material"]]
+		if missing and choice not in MISSING_CHOICES:
+			fail(
+				_(
+					"{0} lesson(s) have no source material. Keep them marked for you to complete, or drop them."
+				).format(len(missing))
+			)
+		if missing and choice == "drop":
+			clean = self._drop_missing(clean)
+		clean["missing_lessons"] = choice if missing else None
+		return clean
+
+	def _drop_missing(self, clean):
+		order = [lesson["key"] for chapter in clean["chapters"] for lesson in chapter["lessons"]]
+		chapters = []
+		for chapter in clean["chapters"]:
+			lessons = [lesson for lesson in chapter["lessons"] if not lesson["missing_material"]]
+			if lessons:
+				chapters.append({**chapter, "lessons": lessons})
+		if not chapters:
+			fail(_("Every lesson lacks source material, so nothing would be left to create."))
+		kept = [lesson["key"] for chapter in chapters for lesson in chapter["lessons"]]
+
+		def nearest(key):
+			if not key or key in kept:
+				return key
+			before = [item for item in order[: order.index(key)] if item in kept]
+			return before[-1] if before else kept[0]
+
+		for item in clean["assignments"]:
+			item["lesson"] = nearest(item["lesson"])
+			for row in item["rubric"]["criteria"]:
+				row["taught_in_lesson"] = nearest(row["taught_in_lesson"]) if row["taught_in_lesson"] else None
+		return {**clean, "chapters": chapters}
+
+	def assert_reviewer(self, proposal):
+		if access.TEACHER not in access.audiences():
+			frappe.throw(_("Only teachers can approve a course draft."), frappe.PermissionError)
+		from lms_copilot.copilot import course_import
+
+		course_import.get_import(load_json(proposal.params, {}).get("course_import"))
+
+	def execute(self, proposal, params):
+		from frappe.utils import md_to_html
+
+		from lms_copilot.copilot import course_import
+
+		reviewer = frappe.session.user
+		course = frappe.get_doc(
+			{
+				"doctype": "LMS Course",
+				"title": params["title"],
+				"short_introduction": params["short_introduction"],
+				"description": md_to_html(params["description"] or params["short_introduction"]),
+				"published": 0,
+				"instructors": [{"instructor": reviewer}],
+			}
+		).insert(ignore_permissions=True)
+
+		assignments = {}
+		for item in params["assignments"]:
+			doc = frappe.get_doc(
+				{
+					"doctype": "LMS Assignment",
+					"title": item["title"],
+					"question": md_to_html(item["question"]),
+					"type": "URL",
+					"course": course.name,
+					"grade_assignment": 1,
+				}
+			).insert(ignore_permissions=True)
+			assignments.setdefault(item["lesson"], []).append(doc.name)
+			item["assignment"] = doc.name
+
+		_doc, index = self._import(params["course_import"])
+		lessons, outline = {}, []
+		for chapter in params["chapters"]:
+			chapter_doc = frappe.get_doc(
+				{"doctype": "Course Chapter", "course": course.name, "title": chapter["title"]}
+			).insert(ignore_permissions=True)
+			names = []
+			for lesson in chapter["lessons"]:
+				blocks = []
+				notes = []
+				if lesson["missing_material"]:
+					blocks.append(markdown_block(_MISSING_NOTE()))
+					notes.append(_("Missing material: this lesson was not drafted from your documents."))
+				blocks.append(markdown_block(lesson["markdown"]))
+				for assignment in assignments.get(lesson["key"], []):
+					blocks.append(
+						{"id": frappe.generate_hash(length=10), "type": "assignment", "data": {"assignment": assignment}}
+					)
+				sources = _source_labels(lesson["sources"], index)
+				if sources:
+					notes.append(_("Sources: {0}").format("; ".join(sources)))
+				doc = frappe.get_doc(
+					{
+						"doctype": "Course Lesson",
+						"course": course.name,
+						"chapter": chapter_doc.name,
+						"title": lesson["title"],
+						"content": frappe.as_json({"blocks": blocks, "version": "2.29.0"}),
+						"instructor_notes": "\n\n".join(notes) or None,
+					}
+				).insert(ignore_permissions=True)
+				lessons[lesson["key"]] = doc.name
+				names.append(doc.name)
+			outline.append((chapter_doc.name, names))
+
+		# LMS hooks touch the chapter and course while lessons are inserted: link the outline last.
+		for chapter_name, names in outline:
+			chapter_doc = frappe.get_doc("Course Chapter", chapter_name)
+			for name in names:
+				chapter_doc.append("lessons", {"lesson": name})
+			chapter_doc.save(ignore_permissions=True)
+		course = frappe.get_doc("LMS Course", course.name)
+		for chapter_name, _names in outline:
+			course.append("chapters", {"chapter": chapter_name})
+		course.save(ignore_permissions=True)
+
+		rubrics = []
+		for item in params["assignments"]:
+			rubric = item["rubric"]
+			criteria = [{**row, "taught_in_lesson": lessons.get(row["taught_in_lesson"])} for row in rubric["criteria"]]
+			doc = frappe.get_doc(
+				{
+					"doctype": "Copilot Rubric",
+					"assignment": item["assignment"],
+					"title": rubric["title"],
+					"visible_to_learner": 1,
+					"notes": rubric.get("notes"),
+					"criteria": criteria,
+				}
+			).insert(ignore_permissions=True)
+			rubrics.append(doc.name)
+
+		course_import.mark_course_created(params["course_import"], course.name)
+		return {
+			"course": course.name,
+			"chapters": len(outline),
+			"lessons": len(lessons),
+			"assignments": [item["assignment"] for item in params["assignments"]],
+			"rubrics": rubrics,
+		}
+
+	def verify(self, proposal, result):
+		course = frappe.get_doc("LMS Course", result["course"])
+		linked = sum(
+			frappe.db.count("Lesson Reference", {"parent": row.chapter, "parenttype": "Course Chapter"})
+			for row in course.chapters
+		)
+		return (
+			len(course.chapters) == result["chapters"]
+			and linked == result["lessons"]
+			and all(frappe.db.exists("Copilot Rubric", name) for name in result["rubrics"])
+		)
+
+
+def _MISSING_NOTE():
+	return _(
+		"> ⚠️ **Missing material.** The assistant wrote this lesson without a matching passage in "
+		"your documents. Check it and add your own material before publishing."
+	)
+
+
 PROPOSAL_TYPES = {
 	handler.label: handler
-	for handler in (LessonQuiz(), LessonChange(), LearnerReminder(), Escalation(), Rubric())
+	for handler in (LessonQuiz(), LessonChange(), LearnerReminder(), Escalation(), Rubric(), CourseDraft())
 }
 TOOL_TYPES = {handler.tool: handler for handler in PROPOSAL_TYPES.values()}
 

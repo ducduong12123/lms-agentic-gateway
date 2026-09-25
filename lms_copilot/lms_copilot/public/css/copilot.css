@@ -794,3 +794,27 @@ span.cite {
 		text-align: left;
 	}
 }
+
+.course-draft .outline {
+	padding-left: 0;
+	list-style: none;
+}
+
+.outline-lesson {
+	border-bottom: 1px solid var(--line);
+	padding: 6px 0;
+}
+
+.outline-lesson summary {
+	cursor: pointer;
+}
+
+.outline-lesson.missing summary b {
+	color: var(--danger, #b42318);
+}
+
+.lesson-text {
+	white-space: pre-wrap;
+	padding: 8px 10px;
+	max-height: 360px;
+}

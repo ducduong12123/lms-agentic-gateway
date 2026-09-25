@@ -10,7 +10,16 @@ Every endpoint requires a signed-in user. Every state change is a POST.
 
 import frappe
 
-from lms_copilot.copilot import access, conversations, feedback, insights, proposals, queue, tools
+from lms_copilot.copilot import (
+	access,
+	conversations,
+	course_import,
+	feedback,
+	insights,
+	proposals,
+	queue,
+	tools,
+)
 
 
 @frappe.whitelist()
@@ -150,3 +159,33 @@ def submit_project(assignment: str, repo_url: str, lesson: str | None = None):
 def rate_answer(conversation: str, message_index: int, helpful: bool | int | str):
 	access.require_login()
 	return conversations.rate_answer(conversation, message_index, helpful)
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_course_source():
+	upload = frappe.request.files.get("file") if frappe.request else None
+	if not upload:
+		frappe.throw(frappe._("No file received."), frappe.ValidationError)
+	content = upload.stream.read(course_import.MAX_FILE_BYTES + 1)
+	return course_import.upload_source(upload.filename, content)
+
+
+@frappe.whitelist(methods=["POST"])
+def create_course_import(title: str, files: list | str, brief: str | None = None):
+	return course_import.create_import(title, files, brief)
+
+
+@frappe.whitelist()
+def get_course_import(name: str):
+	course_import.assert_can_import()
+	return course_import.serialise_import(course_import.get_import(name))
+
+
+@frappe.whitelist()
+def list_course_imports():
+	return course_import.list_imports()
+
+
+@frappe.whitelist(methods=["POST"])
+def retry_course_import(name: str):
+	return course_import.retry_import(name)

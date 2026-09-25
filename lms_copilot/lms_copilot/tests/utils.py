@@ -89,6 +89,7 @@ class CopilotTestCase(BaseTestUtils):
 			"Copilot Rubric",
 			"Copilot Conversation",
 			"Copilot Weekly Insight",
+			"Copilot Course Import",
 		):
 			for name in frappe.get_all(doctype, filters={"creation": [">=", self.started]}, pluck="name"):
 				frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)

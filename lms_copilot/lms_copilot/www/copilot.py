@@ -35,6 +35,12 @@ DYNAMIC_MESSAGES = {
 	"questions",
 	"submissions",
 	"approved_feedback",
+	"Queued",
+	"Ready",
+	"Draft",
+	"page",
+	"slide",
+	"section",
 }
 MESSAGE_CALL = re.compile(r"""__\(\s*(['"])((?:\\.|(?!\1).)*)\1""")
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import frappe
 from frappe import _
 
-from lms_copilot.copilot import access, conversations, feedback, insights, read_tools
+from lms_copilot.copilot import access, conversations, course_import, feedback, insights, read_tools
 from lms_copilot.copilot.access import ENGINE, LEARNER, REVIEWER, TEACHER
 from lms_copilot.copilot.audit import log_tool
 from lms_copilot.copilot.proposals import create_proposal
@@ -69,6 +69,25 @@ def _proposal(tool_name):
 
 	return handler
 
+
+def _propose_course_draft(**params):
+	result = create_proposal("propose_course_draft", params)
+	course_import.attach_proposal(params.get("course_import"), result["proposal"])
+	return result
+
+
+SOURCE_REFS = {
+	"type": "array",
+	"description": "Pages the content comes from, e.g. [{source: 'S1', pages: [3, 4]}].",
+	"items": {
+		"type": "object",
+		"properties": {
+			"source": _string("Source id from get_import_sources (S1, S2…)."),
+			"pages": {"type": "array", "items": {"type": "integer"}},
+		},
+		"required": ["source", "pages"],
+	},
+}
 
 TOOLS = [
 	Tool(
@@ -294,6 +313,106 @@ TOOLS = [
 			confidence=CONFIDENCE,
 		),
 		_proposal("propose_rubric"),
+	),
+	Tool(
+		"get_import_sources",
+		READ,
+		frozenset({TEACHER, ENGINE}),
+		"Text extracted from the documents a teacher uploaded for a new course, page by page, "
+		"with source ids (S1, S2…) to cite.",
+		_schema(["course_import"], course_import=_string("Copilot Course Import name.")),
+		course_import.get_import_sources,
+	),
+	Tool(
+		"record_import_error",
+		RECORD,
+		frozenset({ENGINE}),
+		"Tell the teacher why a course could not be drafted from their documents.",
+		_schema(
+			["course_import", "error"],
+			course_import=_string("Copilot Course Import name."),
+			error=_string("What went wrong, for the teacher."),
+		),
+		course_import.record_import_error,
+	),
+	Tool(
+		"propose_course_draft",
+		PROPOSE,
+		frozenset({TEACHER, ENGINE}),
+		"Propose a complete course built from the teacher's documents: chapters, lessons in Markdown, "
+		"assignments and their rubrics. Every lesson cites the pages it comes from; lessons without a "
+		"source are flagged. Nothing is created until a teacher approves.",
+		_schema(
+			["course_import", "short_introduction", "chapters"],
+			course_import=_string("Copilot Course Import name."),
+			title=_string("Course title. Defaults to the title the teacher gave."),
+			short_introduction=_string("One or two sentences for the course card."),
+			description=_string("Markdown course description: audience, outcomes, prerequisites."),
+			chapters={
+				"type": "array",
+				"minItems": 1,
+				"items": {
+					"type": "object",
+					"properties": {
+						"title": {"type": "string"},
+						"lessons": {
+							"type": "array",
+							"minItems": 1,
+							"items": {
+								"type": "object",
+								"properties": {
+									"title": {"type": "string"},
+									"markdown": _string("Lesson content in Markdown."),
+									"sources": SOURCE_REFS,
+								},
+								"required": ["title", "markdown", "sources"],
+							},
+						},
+					},
+					"required": ["title", "lessons"],
+				},
+			},
+			assignments={
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"title": {"type": "string"},
+						"question": _string("Assignment brief in Markdown."),
+						"after_lesson": _string("Outline number of the lesson it follows, e.g. 2.1."),
+						"sources": SOURCE_REFS,
+						"rubric": {
+							"type": "object",
+							"properties": {
+								"title": {"type": "string"},
+								"notes": {"type": "string"},
+								"criteria": {
+									"type": "array",
+									"minItems": 1,
+									"items": {
+										"type": "object",
+										"properties": {
+											"criterion": {"type": "string"},
+											"description": {"type": "string"},
+											"max_level": {"type": "integer", "minimum": 1, "maximum": 10},
+											"points": {"type": "number", "minimum": 0},
+											"levels": {"type": "string"},
+											"taught_in_lesson": _string("Outline number, e.g. 1.2."),
+										},
+										"required": ["criterion"],
+									},
+								},
+							},
+							"required": ["criteria"],
+						},
+					},
+					"required": ["title", "question", "after_lesson", "rubric"],
+				},
+			},
+			reason=_string("Anything the teacher should know about the draft."),
+			confidence=CONFIDENCE,
+		),
+		_propose_course_draft,
 	),
 	Tool(
 		"save_weekly_insight",

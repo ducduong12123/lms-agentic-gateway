@@ -552,3 +552,189 @@ msgstr "Không tìm thấy {0}."
 
 msgid "{0} learner(s)"
 msgstr "{0} học viên"
+
+msgid "Course draft"
+msgstr "Bản nháp khóa học"
+
+msgid "Course Draft"
+msgstr "Bản nháp khóa học"
+
+msgid "New course from documents"
+msgstr "Tạo khóa từ tài liệu"
+
+msgid "Lessons without source material"
+msgstr "Bài học không có tài liệu nguồn"
+
+msgid "Choose what to do with them…"
+msgstr "Chọn cách xử lý…"
+
+msgid "Keep them, marked for me to complete"
+msgstr "Giữ lại, gắn nhãn để tôi bổ sung"
+
+msgid "Drop them from the course"
+msgstr "Bỏ khỏi khóa học"
+
+msgid "{0} lesson(s) have no source material in your documents."
+msgstr "{0} bài học không có đoạn tài liệu nguồn tương ứng."
+
+msgid "Open the new course (unpublished)"
+msgstr "Mở khóa học mới (chưa xuất bản)"
+
+msgid "Choose what to do with the lessons that have no source material."
+msgstr "Hãy chọn cách xử lý các bài thiếu tài liệu nguồn."
+
+msgid "Missing material"
+msgstr "Thiếu tài liệu"
+
+msgid "From: {0}"
+msgstr "Từ: {0}"
+
+msgid "Chapter {0}: {1}"
+msgstr "Chương {0}: {1}"
+
+msgid "Assignments and rubrics"
+msgstr "Bài tập và rubric"
+
+msgid "After lesson {0}"
+msgstr "Sau bài {0}"
+
+msgid "taught in {0}"
+msgstr "dạy ở bài {0}"
+
+msgid "Could not upload {0}."
+msgstr "Không tải lên được {0}."
+
+msgid "Course title"
+msgstr "Tên khóa học"
+
+msgid "e.g. Python for beginners"
+msgstr "vd: Python cho người mới bắt đầu"
+
+msgid "Brief"
+msgstr "Yêu cầu"
+
+msgid "Audience, goals, and topics the outline must cover (optional)"
+msgstr "Đối tượng, mục tiêu, chủ đề đề cương phải có (không bắt buộc)"
+
+msgid "Documents"
+msgstr "Tài liệu"
+
+msgid "Draft the course"
+msgstr "Soạn khóa học"
+
+msgid "Uploading…"
+msgstr "Đang tải lên…"
+
+msgid "Upload the slides, syllabus, exercises and grading criteria you already have. The assistant drafts chapters, lessons, assignments and rubrics that cite your pages. Nothing is created until you approve the draft."
+msgstr "Tải lên slide, giáo trình, bài tập và tiêu chí chấm sẵn có. Trợ lý soạn chương, bài học, bài tập và rubric, có dẫn tới trang tài liệu. Không có gì được tạo trên LMS trước khi bạn duyệt bản nháp."
+
+msgid "Documents (PDF, DOCX, PPTX, Markdown, text; up to 10 files)"
+msgstr "Tài liệu (PDF, DOCX, PPTX, Markdown, văn bản; tối đa 10 file)"
+
+msgid "Brief for the assistant"
+msgstr "Yêu cầu cho trợ lý"
+
+msgid "Earlier imports"
+msgstr "Các lần tạo trước"
+
+msgid "The assistant is reading your documents and drafting the course. This usually takes one to three minutes; the page refreshes by itself."
+msgstr "Trợ lý đang đọc tài liệu và soạn khóa học, thường mất 1–3 phút; trang sẽ tự cập nhật."
+
+msgid "Review the course draft"
+msgstr "Duyệt bản nháp khóa học"
+
+msgid "Open the course draft"
+msgstr "Mở bản nháp khóa học"
+
+msgid "Draft again"
+msgstr "Soạn lại"
+
+msgid "Queued again."
+msgstr "Đã xếp hàng soạn lại."
+
+msgid "Source"
+msgstr "Nguồn"
+
+msgid "Extracted"
+msgstr "Đã trích"
+
+msgid "{0} {1}(s), {2} characters"
+msgstr "{0} {1}, {2} ký tự"
+
+msgid "page"
+msgstr "trang"
+
+msgid "slide"
+msgstr "slide"
+
+msgid "section"
+msgstr "mục"
+
+msgid "p."
+msgstr "tr."
+
+msgid "Queued"
+msgstr "Đang soạn"
+
+msgid "Ready"
+msgstr "Đã có bản nháp"
+
+msgid "Create course “{0}” from {1} file(s)"
+msgstr "Tạo khóa “{0}” từ {1} tài liệu"
+
+msgid "{0} chapter(s), {1} lesson(s), {2} assignment(s) with rubric from {3} file(s)."
+msgstr "{0} chương, {1} bài học, {2} bài tập kèm rubric từ {3} tài liệu."
+
+msgid "{0} lesson(s) have no source material."
+msgstr "{0} bài không có tài liệu nguồn."
+
+msgid "{0} lesson(s) have no source material. Keep them marked for you to complete, or drop them."
+msgstr "{0} bài không có tài liệu nguồn. Hãy chọn giữ lại (gắn nhãn để bổ sung) hoặc bỏ các bài đó."
+
+msgid "Missing material: this lesson was not drafted from your documents."
+msgstr "Thiếu tài liệu: bài này không được soạn từ tài liệu của bạn."
+
+msgid "Sources: {0}"
+msgstr "Nguồn: {0}"
+
+msgid "> ⚠️ **Missing material.** The assistant wrote this lesson without a matching passage in your documents. Check it and add your own material before publishing."
+msgstr "> ⚠️ **Thiếu tài liệu.** Trợ lý soạn bài này khi không có đoạn tương ứng trong tài liệu của bạn. Hãy kiểm tra và bổ sung tài liệu trước khi xuất bản."
+
+msgid "Only teachers can create courses from documents."
+msgstr "Chỉ giáo viên mới tạo được khóa học từ tài liệu."
+
+msgid "This course import belongs to another teacher."
+msgstr "Lần tạo khóa này thuộc về giáo viên khác."
+
+msgid "No text could be extracted from the files."
+msgstr "Không trích được văn bản nào từ các file."
+
+msgid "The AI Gateway is not configured (Copilot Settings)."
+msgstr "Chưa cấu hình AI Gateway (Copilot Settings)."
+
+msgid "This import already has a course draft. Reject it first to draft again."
+msgstr "Lần tạo này đã có bản nháp khóa học. Hãy từ chối bản nháp đó trước khi soạn lại."
+
+msgid "A course was already created from this import."
+msgstr "Khóa học đã được tạo từ lần này rồi."
+
+msgid "Only teachers can approve a course draft."
+msgstr "Chỉ giáo viên mới duyệt được bản nháp khóa học."
+
+msgid "Every lesson lacks source material, so nothing would be left to create."
+msgstr "Tất cả bài học đều thiếu tài liệu nguồn nên không còn gì để tạo."
+
+msgid "No text found in {0}. Scanned documents need OCR first."
+msgstr "Không tìm thấy văn bản trong {0}. Tài liệu scan cần OCR trước."
+
+msgid "{0}: only PDF, DOCX, PPTX, Markdown and text files are supported."
+msgstr "{0}: chỉ hỗ trợ PDF, DOCX, PPTX, Markdown và văn bản."
+
+msgid "{0} is larger than 25 MB."
+msgstr "{0} lớn hơn 25 MB."
+
+msgid "The PDF is password protected."
+msgstr "PDF có mật khẩu."
+
+msgid "No file received."
+msgstr "Chưa nhận được file."

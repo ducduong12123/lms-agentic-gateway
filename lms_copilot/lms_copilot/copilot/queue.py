@@ -14,6 +14,7 @@ KINDS = {
 	"Learner Reminder": "Learner Reminder",
 	"Escalation": "Escalation",
 	"Rubric": "Rubric",
+	"Course Draft": "Course Draft",
 }
 MAX_ROWS = 200
 
@@ -62,17 +63,26 @@ def _feedback_rows(course_filter):
 	return rows
 
 
-def _proposal_rows(course_filter):
-	proposals = frappe.get_all(
+def _proposal_rows(course_filter, course_drafts=True):
+	names = frappe.get_all(
 		"Copilot Proposal",
 		filters={"status": OPEN, **course_filter},
-		fields=["name"],
+		pluck="name",
 		order_by="creation asc",
 		limit=MAX_ROWS,
 	)
+	if course_drafts and course_filter:
+		# A course draft has no course yet, so the course filter never matches it.
+		names += frappe.get_all(
+			"Copilot Proposal",
+			filters={"status": OPEN, "proposal_type": "Course Draft"},
+			pluck="name",
+			order_by="creation asc",
+			limit=MAX_ROWS,
+		)
 	rows = []
-	for row in proposals:
-		doc = frappe.get_doc("Copilot Proposal", row.name)
+	for name in dict.fromkeys(names):
+		doc = frappe.get_doc("Copilot Proposal", name)
 		if expire_if_needed(doc):
 			continue
 		try:
@@ -109,7 +119,7 @@ def get_review_queue(course=None, kind=None):
 			frappe.throw(_("You cannot review work for this course."), frappe.PermissionError)
 		courses = [course]
 	course_filter = _course_filter(courses)
-	rows = _feedback_rows(course_filter) + _proposal_rows(course_filter)
+	rows = _feedback_rows(course_filter) + _proposal_rows(course_filter, course_drafts=not course)
 	counts = {key: 0 for key in KINDS}
 	for row in rows:
 		counts[row["kind"]] = counts.get(row["kind"], 0) + 1
