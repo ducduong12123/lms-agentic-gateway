@@ -352,3 +352,21 @@ def test_related_lessons_keep_only_blocks_close_to_the_best():
         {"lesson": "L3", "block_id": "err", "citation": "Lỗi", "score": 0.5},
     ]}}]
     assert [item["block_id"] for item in tutor.related_citations(calls)] == ["try", "err"]
+
+
+def test_related_lessons_skip_duplicate_labels():
+    calls = [{"tool": tutor.SEARCH_TOOL, "args": {"course": "PY-101"}, "result": {"results": [
+        {"lesson": "L3", "block_id": "try", "citation": "Bài 3 · try/except", "score": 0.6},
+        {"lesson": "L3", "block_id": "try-body", "citation": "Bài 3 · try/except", "score": 0.6},
+        {"lesson": "L3", "block_id": "err", "citation": "Bài 3 · Lỗi", "score": 0.55},
+    ]}}]
+    assert [item["block_id"] for item in tutor.related_citations(calls)] == ["try", "err"]
+
+
+def test_missing_course_argument_is_filled_from_the_open_page():
+    frappe = FakeFrappe()
+    registry = build_registry(frappe)
+    llm = ScriptedLLM(_call("copilot_search_course_content", query="vòng lặp"), {"content": "Xem [[cite:LS-1#b1]]."})
+    agent_loop.run_agent(llm, registry, "student", "vòng lặp for?", _context())
+    searches = [args for tool, args, _ in frappe.calls if tool == "search_course_content"]
+    assert searches[-1] == {"course": "PY-101", "query": "vòng lặp"}

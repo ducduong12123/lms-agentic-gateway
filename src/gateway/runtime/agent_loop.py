@@ -408,6 +408,11 @@ def _run_tool(registry, allowed: list, role: str, name: str, args: dict, context
     if context.get("session_id"):
         args["_session_id"] = context["session_id"]
     tool = registry.get(name)
+    if tool is not None and name.startswith(COPILOT_PREFIX) and not args.get("course"):
+        # Model hay bỏ trống course dù trang đang mở đã cho biết khóa học; lms_copilot vẫn tự kiểm tra quyền.
+        route = context.get("route") if isinstance(context.get("route"), dict) else {}
+        if route.get("course") and "course" in ((tool.parameters or {}).get("properties") or {}):
+            args["course"] = str(route["course"])
     run_id = str(context.get("_run_id") or "")
     step_id = ""
     if not tool or name not in allowed:

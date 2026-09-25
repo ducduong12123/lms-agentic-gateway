@@ -285,10 +285,18 @@ def related_citations(tool_calls: list[dict]) -> list[dict]:
     if ranked:
         best = ranked[0][0]
         ranked = [item for item in ranked if item[0] >= best * RELATED_OF_BEST]
-    return [
-        {"lesson": key[0], "block_id": key[1], "label": info["label"][:200], "related": True}
-        for _score, key, info in ranked[:MAX_RELATED]
-    ]
+    related: list[dict] = []
+    seen_labels: set[str] = set()
+    for _score, key, info in ranked:
+        label = info["label"][:200]
+        # Tiêu đề và thân của cùng một mục có chung nhãn: chỉ hiện một link.
+        if label in seen_labels:
+            continue
+        seen_labels.add(label)
+        related.append({"lesson": key[0], "block_id": key[1], "label": label, "related": True})
+        if len(related) >= MAX_RELATED:
+            break
+    return related
 
 
 def lesson_routes(registry, course: str) -> dict[str, str]:
