@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 import hashlib
+import hmac
 import json
 import threading
 import time
@@ -11,7 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import uvicorn
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Request
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -30,6 +31,8 @@ from gateway.runtime.long_memory import search_memories
 from gateway.runtime.model_client import OpenAICompatClient
 from gateway.runtime.route_adapter import load_lesson_context, resolve_lms_context
 from gateway.runtime.scheduler import ProactiveWorker
+from gateway.runtime import review_jobs
+from gateway.runtime.review_worker import ReviewRunner, ReviewWorker
 from gateway.tools.catalog import build_registry
 from gateway.tools import plan_executors
 
@@ -59,16 +62,33 @@ _rate_lock = threading.Lock()
 _rate_events: dict[str, deque[float]] = defaultdict(deque)
 
 
+def _review_worker() -> ReviewWorker:
+    # Tra _base_frappe lúc chạy (không bind sẵn) để test thay được client giả.
+    return ReviewWorker(
+        lambda: _base_frappe(),
+        lambda model: OpenAICompatClient(
+            settings.llm_base_url, settings.llm_api_key, model or settings.llm_model,
+            timeout=settings.review_llm_timeout,
+        ),
+    )
+
+
+review_runner = ReviewRunner(_review_worker)
+
+
 @app.on_event("startup")
 def start_event_worker() -> None:
     event_processor.start()
     proactive_worker.start()
+    # Chạy tiếp các job nhận xét chưa xong trước lần khởi động lại.
+    review_runner.start()
 
 
 @app.on_event("shutdown")
 def stop_event_worker() -> None:
     event_processor.stop()
     proactive_worker.stop()
+    review_runner.stop()
 
 
 class ChatPayload(BaseModel):
@@ -119,6 +139,13 @@ class TeacherActionPayload(BaseModel):
     target: str = Field(min_length=3, max_length=256)
     subject: str = Field(min_length=1, max_length=180)
     message: str = Field(min_length=1, max_length=2000)
+
+
+class ReviewJobPayload(BaseModel):
+    site: str = Field(default="", max_length=500)
+    project_submission: str = Field(min_length=1, max_length=140, pattern=r"^[A-Za-z0-9 _.\-]+$")
+    rewrite_of: str | None = Field(default=None, max_length=140, pattern=r"^[A-Za-z0-9 _.\-]*$")
+    model: str | None = Field(default=None, max_length=140)
 
 
 def trusted_identity(sid: str | None = Cookie(default=None)) -> Identity:
@@ -766,6 +793,31 @@ def _apply_write_plan(frappe, tool_name: str, plan: dict, payload_items, typed_c
         result["applied_items"] = [str(entry.get("id") or "") for entry in selected]
         result["rejected_items"] = [str(entry.get("id") or "") for entry in rejected]
     return result
+
+
+def _require_job_key(authorization: str | None) -> None:
+    """Bearer phải trùng COPILOT_JOB_KEY (so sánh hằng thời gian); chưa cấu hình key thì từ chối."""
+    expected = settings.copilot_job_key
+    scheme, _, token = str(authorization or "").partition(" ")
+    if not expected or scheme.lower() != "bearer" or not hmac.compare_digest(
+        token.strip().encode("utf-8"), expected.encode("utf-8")
+    ):
+        raise HTTPException(status_code=401, detail="invalid job key")
+
+
+@app.post("/copilot/jobs/review", status_code=202)
+@app.post("/ai/copilot/jobs/review", status_code=202)
+def copilot_review_job(payload: ReviewJobPayload, authorization: str | None = Header(default=None)) -> dict:
+    """lms_copilot gọi khi học viên nộp repo hoặc giáo viên yêu cầu viết lại; xử lý ở thread nền."""
+    _require_job_key(authorization)
+    if not _base_frappe().is_configured:
+        raise HTTPException(status_code=503, detail="gateway has no Frappe service account")
+    job, queued = review_jobs.enqueue(
+        payload.project_submission, payload.rewrite_of or None, payload.site, payload.model or ""
+    )
+    if queued:
+        review_runner.submit(job["id"])
+    return {"job": job["id"], "status": job["status"], "queued": queued}
 
 
 @app.post("/webhook/frappe")
