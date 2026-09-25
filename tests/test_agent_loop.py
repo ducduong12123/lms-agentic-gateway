@@ -268,3 +268,35 @@ def test_ambiguous_teacher_request_routes_and_executes_multiple_domains():
     assert result["plan"]["bundles"] == [
         "course.read", "course.authoring", "course.workspace", "analytics.learning",
     ]
+
+
+class GroundedAnswerClient:
+    def __init__(self, answer="Vòng lặp for dùng để lặp qua một tập phần tử."):
+        self.answer = answer
+
+    def chat(self, messages, tools=None):
+        return {"choices": [{"message": {"content": self.answer, "tool_calls": []}}]}
+
+
+def test_student_course_answer_gets_verified_lesson_citation():
+    result = agent_loop.run_agent(
+        GroundedAnswerClient(), ToolRegistry(), "student", "Vòng lặp for là gì?",
+        {"user": "student@test.com", "route": {"kind": "lesson", "course": "PY-101", "lesson": "LESSON-1", "path": "/lms/courses/PY-101/learn/1-1"},
+         "current_lesson": {"name": "LESSON-1", "title": "Vòng lặp", "course": "PY-101", "body": "for dùng để lặp qua các phần tử của một iterable."}},
+    )
+    assert "LMS Course: PY-101, Course Lesson: Vòng lặp" in result["answer"]
+    assert "/lms/courses/PY-101/learn/1-1" in result["answer"]
+    assert result["escalations"] == []
+
+
+def test_student_course_answer_without_grounding_is_replaced_by_escalation(monkeypatch):
+    monkeypatch.setattr(features, "create_qa_escalation", lambda **kwargs: {"id": "esc-test", "status": "open", **kwargs})
+    result = agent_loop.run_agent(
+        GroundedAnswerClient("Cứ đoán là đáp án A."), ToolRegistry(), "student", "Tại sao đoạn code này lỗi?",
+        {"user": "student@test.com", "session_id": "chat-1",
+         "route": {"kind": "lesson", "course": "PY-101", "lesson": "LESSON-1", "path": "/lms/courses/PY-101/learn/1-1"}, "current_lesson": {}},
+    )
+    assert "Cứ đoán" not in result["answer"]
+    assert "đã được chuyển cho giáo viên" in result["answer"]
+    assert "esc-test" in result["answer"]
+    assert result["escalations"][0]["id"] == "esc-test"

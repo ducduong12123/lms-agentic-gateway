@@ -514,6 +514,21 @@ def teacher_risk(course: str = "", identity: Identity = Depends(trusted_identity
     return {"course": course, "students": features.detect_risk(course)}
 
 
+@app.get("/teacher/escalations")
+def teacher_escalations(
+    course: str = "", status: str = "open", limit: int = 100,
+    identity: Identity = Depends(trusted_identity),
+) -> dict:
+    if identity.role == "teacher" and not course:
+        raise HTTPException(status_code=400, detail="course is required for teacher escalation queue")
+    _require_course_access(identity, course)
+    try:
+        items = features.list_qa_escalations(course=course, status=status, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"course": course, "status": status, "escalations": items}
+
+
 @app.post("/teacher/actions")
 def propose_action(payload: TeacherActionPayload, request: Request,
                    identity: Identity = Depends(trusted_identity)) -> dict:

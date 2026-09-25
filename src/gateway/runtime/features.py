@@ -81,6 +81,18 @@ def _migrate(path: Path | None = None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_lesson_draft_session "
             "ON lesson_draft(session_id, updated DESC)"
         )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS qa_escalation ("
+            "id TEXT PRIMARY KEY, member TEXT NOT NULL, session_id TEXT NOT NULL DEFAULT '', "
+            "course TEXT NOT NULL DEFAULT '', lesson TEXT NOT NULL DEFAULT '', "
+            "question TEXT NOT NULL, reason TEXT NOT NULL DEFAULT 'insufficient_approved_evidence', "
+            "status TEXT NOT NULL DEFAULT 'open', created REAL NOT NULL, "
+            "resolved_by TEXT, resolved_at REAL)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_qa_escalation_course_status "
+            "ON qa_escalation(course, status, created DESC)"
+        )
 
 
 def list_concepts(course: str = "", status: str = "", path: Path | None = None) -> list[dict]:
@@ -538,6 +550,87 @@ def approve_teacher_action(action_id: str, approved_by: str, frappe,
     return {"id": action_id, "status": "executed", "result": result}
 
 
+def create_qa_escalation(
+    member: str,
+    session_id: str,
+    course: str,
+    lesson: str,
+    question: str,
+    reason: str = "insufficient_approved_evidence",
+    path: Path | None = None,
+) -> dict:
+    """Queue one grounded-Q&A escalation for teacher review.
+
+    Exact repeated questions in the same chat reuse the existing open item so a
+    retry or reconnect does not flood the teacher queue.
+    """
+    _migrate(path)
+    member = str(member or "").strip()
+    if not member or member == "Guest":
+        raise ValueError("member chưa đăng nhập.")
+    session_id = str(session_id or "").strip()[:128]
+    course = str(course or "").strip()[:256]
+    lesson = str(lesson or "").strip()[:256]
+    question = " ".join(str(question or "").split())[:12000]
+    if not question:
+        raise ValueError("question trống.")
+    reason = str(reason or "insufficient_approved_evidence").strip()[:128]
+    with learner._conn(path) as conn:
+        existing = conn.execute(
+            "SELECT id,member,session_id,course,lesson,question,reason,status,created "
+            "FROM qa_escalation WHERE member=? AND session_id=? AND question=? AND status='open' "
+            "ORDER BY created DESC LIMIT 1",
+            (member, session_id, question),
+        ).fetchone()
+        if existing:
+            return {**dict(existing), "duplicate": True}
+        item_id = "esc_" + uuid.uuid4().hex[:12]
+        now = time.time()
+        conn.execute(
+            "INSERT INTO qa_escalation(id,member,session_id,course,lesson,question,reason,status,created) "
+            "VALUES(?,?,?,?,?,?,?,'open',?)",
+            (item_id, member, session_id, course, lesson, question, reason, now),
+        )
+    return {
+        "id": item_id, "member": member, "session_id": session_id, "course": course,
+        "lesson": lesson, "question": question, "reason": reason, "status": "open",
+        "created": now, "duplicate": False,
+    }
+
+
+def list_qa_escalations(
+    course: str = "",
+    status: str = "open",
+    limit: int = 100,
+    path: Path | None = None,
+) -> list[dict]:
+    _migrate(path)
+    course = str(course or "").strip()
+    status = str(status or "open").strip().casefold()
+    if status not in {"open", "resolved", "all"}:
+        raise ValueError("status phải là open, resolved hoặc all.")
+    try:
+        limit = max(1, min(200, int(limit or 100)))
+    except (TypeError, ValueError):
+        limit = 100
+    clauses: list[str] = []
+    args: list[object] = []
+    if course:
+        clauses.append("course=?")
+        args.append(course)
+    if status != "all":
+        clauses.append("status=?")
+        args.append(status)
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    with learner._conn(path) as conn:
+        rows = conn.execute(
+            "SELECT id,member,session_id,course,lesson,question,reason,status,created,resolved_by,resolved_at "
+            f"FROM qa_escalation{where} ORDER BY created DESC LIMIT ?",
+            (*args, limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def erase_member(member: str, path: Path | None = None) -> dict:
     _migrate(path)
     deleted = 0
@@ -551,6 +644,7 @@ def erase_member(member: str, path: Path | None = None) -> dict:
             ("evidence", "member"), ("mastery", "member"), ("learning_session", "member"),
             ("member_pref", "member"), ("daily_plan", "member"), ("route_prompt", "member"),
             ("agent_action", "target"), ("long_memories", "user"), ("concept_feedback", "member"),
+            ("qa_escalation", "member"),
             ("conversation_state", "member"), ("lesson_draft", "member"),
             ("course_project", "member"), ("chat_session", "member"),
         ):
