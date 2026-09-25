@@ -197,6 +197,7 @@
 		'Lesson Quiz': () => __('Lesson quiz'),
 		'Learner Reminder': () => __('Learner reminder'),
 		Escalation: () => __('Question for you'),
+		Rubric: () => __('Rubric'),
 	}
 
 	const STATUS_TONE = {

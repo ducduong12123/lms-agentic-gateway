@@ -13,6 +13,7 @@ KINDS = {
 	"Lesson Quiz": "Lesson Quiz",
 	"Learner Reminder": "Learner Reminder",
 	"Escalation": "Escalation",
+	"Rubric": "Rubric",
 }
 MAX_ROWS = 200
 

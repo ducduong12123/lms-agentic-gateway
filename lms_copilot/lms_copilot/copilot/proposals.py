@@ -30,9 +30,11 @@ from lms_copilot.copilot.content import (
 )
 from lms_copilot.copilot.quiz import create_quiz_in_lesson, normalise_quiz, quiz_preview_lines
 from lms_copilot.copilot.validation import (
+	boolean,
 	confidence,
 	existing,
 	fail,
+	integer,
 	load_json,
 	optional_text,
 	parse_list,
@@ -43,6 +45,8 @@ from lms_copilot.copilot.validation import (
 OPEN = "Pending"
 MAX_MARKDOWN = 20000
 MAX_REMINDER_LEARNERS = 200
+MAX_RUBRIC_CRITERIA = 20
+MAX_RUBRIC_LEVEL = 10
 
 
 class ProposalType:
@@ -276,8 +280,158 @@ class Escalation(ProposalType):
 		return {"notified": proposal.requested_by, "course": params["course"]}
 
 
+def _criterion(item, index, course):
+	if not isinstance(item, dict):
+		fail(_("Criterion {0} must be an object.").format(index))
+	label = _("Criterion {0}").format(index)
+	max_level = integer(item.get("max_level", 3), _("{0} max level").format(label), 1, MAX_RUBRIC_LEVEL)
+	points = item.get("points")
+	if points not in (None, ""):
+		try:
+			points = float(points)
+		except (TypeError, ValueError):
+			fail(_("{0} points must be a number.").format(label))
+		if isinstance(item.get("points"), bool) or not 0 <= points <= 1000:
+			fail(_("{0} points must be between 0 and 1000.").format(label))
+	lesson = optional_text(item.get("taught_in_lesson"), _("{0} lesson").format(label), 140)
+	if lesson:
+		lesson = existing("Course Lesson", lesson, _("{0} lesson").format(label))
+		if frappe.db.get_value("Course Lesson", lesson, "course") != course:
+			fail(_("{0} points to a lesson from another course.").format(label))
+	return {
+		"criterion": required_text(item.get("criterion"), label, 140),
+		"description": optional_text(item.get("description"), _("{0} description").format(label), 2000),
+		"max_level": max_level,
+		"points": points if points not in (None, "") else None,
+		"levels": optional_text(item.get("levels"), _("{0} levels").format(label), 2000),
+		"taught_in_lesson": lesson,
+		"pass_example": optional_text(item.get("pass_example"), _("{0} passing example").format(label), 4000),
+		"fail_example": optional_text(item.get("fail_example"), _("{0} failing example").format(label), 4000),
+	}
+
+
+def _rubric_lines(title, criteria):
+	lines = [f"# {title}"] if title else []
+	for row in criteria:
+		points = f", {row['points']:g} pts" if row.get("points") else ""
+		lines.append(f"## {row['criterion']} (1–{row['max_level']}{points})")
+		for key, prefix in (
+			("description", ""),
+			("levels", ""),
+			("taught_in_lesson", "Lesson: "),
+			("pass_example", "Pass: "),
+			("fail_example", "Fail: "),
+		):
+			if row.get(key):
+				lines.extend(f"{prefix}{line}" for line in str(row[key]).splitlines())
+	return "\n".join(lines)
+
+
+def _current_rubric(assignment):
+	name = frappe.db.get_value("Copilot Rubric", {"assignment": assignment}, "name", order_by="modified desc")
+	return frappe.get_doc("Copilot Rubric", name) if name else None
+
+
+def _rubric_rows(rubric):
+	fields = (
+		"criterion",
+		"description",
+		"max_level",
+		"points",
+		"levels",
+		"taught_in_lesson",
+		"pass_example",
+		"fail_example",
+	)
+	return [{key: row.get(key) for key in fields} for row in rubric.criteria]
+
+
+class Rubric(ProposalType):
+	"""Create or replace the rubric an assignment is graded with."""
+
+	label = "Rubric"
+	tool = "propose_rubric"
+	audiences = frozenset({access.TEACHER, access.ENGINE})
+	source_doctype = "LMS Assignment"
+	locked_keys = ("assignment",)
+
+	def prepare(self, params):
+		params = parse_object(params, _("Parameters"))
+		assignment = existing("LMS Assignment", params.get("assignment"), _("Assignment"))
+		doc = frappe.get_doc("LMS Assignment", assignment)
+		course = doc.get("course")
+		if not course:
+			fail(_("This assignment is not linked to a course."))
+		if not access.is_engine():
+			access.assert_teacher(course)
+		items = parse_list(params.get("criteria"), _("Criteria"), minimum=1, maximum=MAX_RUBRIC_CRITERIA)
+		criteria = [_criterion(item, index, course) for index, item in enumerate(items, 1)]
+		names = [row["criterion"] for row in criteria]
+		if len(set(names)) != len(names):
+			fail(_("Each criterion needs a different name."))
+		title = optional_text(params.get("title"), _("Title"), 140) or doc.title
+		visible = params.get("visible_to_learner")
+		clean = {
+			"assignment": assignment,
+			"title": title,
+			"criteria": criteria,
+			"visible_to_learner": 1 if visible in (None, "") else boolean(visible, _("Visible to learners")),
+			"notes": optional_text(params.get("notes"), _("Notes"), 4000),
+			"reason": optional_text(params.get("reason"), _("Reason"), 1000),
+		}
+		current = _current_rubric(assignment)
+		before = _rubric_lines(current.title, _rubric_rows(current)) if current else ""
+		return {
+			"course": course,
+			"reference_doctype": "LMS Assignment",
+			"reference_name": assignment,
+			"title": (_("Replace rubric of {0}") if current else _("Add rubric to {0}")).format(doc.title),
+			"summary": clean["reason"],
+			"params": clean,
+			"preview": {"kind": "diff", "lines": text_diff(before, _rubric_lines(title, criteria))},
+		}
+
+	def source_state(self, name):
+		"""The rubric the agent saw: stale if it is created, edited or removed before approval."""
+		if not name:
+			return None, None
+		current = _current_rubric(name)
+		if not current:
+			return None, content_hash("no rubric")
+		state = frappe.as_json({"name": current.name, "title": current.title, "rows": _rubric_rows(current)})
+		return str(current.modified), content_hash(state)
+
+	def execute(self, proposal, params):
+		rubric = _current_rubric(params["assignment"])
+		values = {
+			"title": params["title"],
+			"visible_to_learner": params["visible_to_learner"],
+			"criteria": params["criteria"],
+		}
+		if params.get("notes"):
+			values["notes"] = params["notes"]
+		if rubric:
+			rubric.update(values)
+			rubric.save(ignore_permissions=True)
+		else:
+			rubric = frappe.get_doc(
+				{"doctype": "Copilot Rubric", "assignment": params["assignment"], **values}
+			).insert(ignore_permissions=True)
+		return {"rubric": rubric.name, "assignment": params["assignment"], "criteria": len(rubric.criteria)}
+
+	def verify(self, proposal, result):
+		expected = [row["criterion"] for row in load_json(proposal.final_params, {}).get("criteria", [])]
+		rubric = _current_rubric(result["assignment"])
+		return (
+			bool(rubric)
+			and rubric.name == result["rubric"]
+			and [row.criterion for row in rubric.criteria] == expected
+		)
+
+
 PROPOSAL_TYPES = {
-	handler.label: handler for handler in (LessonQuiz(), LessonChange(), LearnerReminder(), Escalation())
+	handler.label: handler
+	for handler in (LessonQuiz(), LessonChange(), LearnerReminder(), Escalation(), Rubric())
 }
 TOOL_TYPES = {handler.tool: handler for handler in PROPOSAL_TYPES.values()}
 
