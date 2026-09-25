@@ -340,5 +340,5 @@ def build_registry(frappe: FrappeClient, llm=None) -> ToolRegistry:
     register_student_verbs(reg, frappe, llm)
     configure_registry(reg)
     # Sau configure_registry: tool copilot_* mang sẵn bundle copilot.lms, không nằm trong BUNDLES tĩnh.
-    register_copilot_tools(reg, frappe)
+    register_copilot_tools(reg, frappe, llm)
     return reg
