@@ -101,10 +101,16 @@ POLICY: dict[str, list[str]] = {
 # Tool lms_copilot được đăng ký động theo catalog mà Frappe trả cho chính user này,
 # nên mọi tool copilot_* có trong registry đều đã qua lọc role ở phía Frappe.
 COPILOT_PREFIX = "copilot_"
+# Tool ghi nhật ký/báo cáo do runtime gọi theo luật cố định (tutor.finish_turn, weekly_insight);
+# LLM không được tự gọi, để số liệu và trích dẫn luôn đi qua bước kiểm tra của Gateway.
+RUNTIME_ONLY = {"copilot_log_conversation_turn", "copilot_save_weekly_insight"}
 
 
 def allowed_tools(role: str, registry=None) -> list[str]:
     allowed = list(POLICY.get(role, POLICY["student"]))
     if registry is not None:
-        allowed += [name for name in registry.names() if name.startswith(COPILOT_PREFIX)]
+        allowed += [
+            name for name in registry.names()
+            if name.startswith(COPILOT_PREFIX) and name not in RUNTIME_ONLY
+        ]
     return allowed

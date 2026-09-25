@@ -54,10 +54,16 @@ class Settings:
     scheduler_timezone: str = _get("SCHEDULER_TIMEZONE", "Asia/Ho_Chi_Minh")
     daily_plan_hour: int = int(_get("DAILY_PLAN_HOUR", "7") or 7)
     transcript_retention_days: int = int(_get("TRANSCRIPT_RETENTION_DAYS", "90") or 90)
+    # Job gọi từ lịch/cron ngoài dùng Bearer này và chạy bằng tài khoản AI Engine (FRAPPE_API_KEY).
+    copilot_job_key: str = _get("COPILOT_JOB_KEY", "")
+    weekly_report_hour: int = int(_get("WEEKLY_REPORT_HOUR", "7") or 7)
+    # lms_copilot chưa có tool liệt kê khóa học, nên lịch báo cáo tuần đọc danh sách từ env.
+    copilot_weekly_courses: tuple[str, ...] = tuple(
+        course.strip() for course in _get("COPILOT_WEEKLY_COURSES", "").split(",") if course.strip()
+    )
 
     # Job nhận xét bài dự án do lms_copilot gọi tới (F1).
     # COPILOT_JOB_KEY phải trùng Copilot Settings.gateway_api_key; để trống thì từ chối mọi job.
-    copilot_job_key: str = _get("COPILOT_JOB_KEY", "")
     review_sandbox: str = (_get("REVIEW_SANDBOX", "off") or "off").strip().lower()
     review_sandbox_image: str = _get("REVIEW_SANDBOX_IMAGE", "python:3.12-slim")
     review_test_command: str = _get(

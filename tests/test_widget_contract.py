@@ -51,3 +51,19 @@ def test_widget_does_not_claim_identity():
     assert "approvePlan" in source
     assert "typed_confirm" in source
     assert "acp-reversibility" in source
+
+
+def test_widget_renders_closed_tutor_card():
+    source = (Path(__file__).resolve().parents[1] / "widget" / "agentic-copilot.js").read_text(
+        encoding="utf-8"
+    )
+    assert "function renderTutor(target, card)" in source
+    assert 'card.kind !== "tutor"' in source
+    # Link trích dẫn chỉ nhận route bài học của LMS, dựng bằng textContent.
+    assert "/^\/lms\/courses\/[^/]+\/learn\/\d+-\d+$/.test(route)" in source
+    assert "a.textContent = item.label || item.lesson" in source
+    assert 'postCopilot("/copilot/answers/rate"' in source
+    assert 'postCopilot("/copilot/escalate"' in source
+    assert "Hỏi giáo viên" in source
+    assert "renderTutor(box, ev.tutor)" in source
+    assert "j.tutor" in source

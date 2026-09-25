@@ -144,3 +144,19 @@ class FrappeClient:
             if value is not None:
                 body[key] = value
         return self._call("POST", "/api/method/lms_copilot.api.call_tool", body=body).get("message")
+
+    def get_copilot_weekly_insight(self, course: str, week_start: str | None = None) -> dict | None:
+        """Báo cáo điểm vướng mới nhất (hoặc của tuần chứa week_start); chưa có thì None."""
+        params = {"course": course}
+        if week_start:
+            params["week_start"] = week_start
+        message = self.get_method("lms_copilot.api.get_weekly_insight", **params).get("message")
+        return message if isinstance(message, dict) else None
+
+    def rate_copilot_answer(self, conversation: str, message_index: int, helpful: bool):
+        return self.call_method(
+            "lms_copilot.api.rate_answer",
+            conversation=conversation,
+            message_index=int(message_index),
+            helpful=1 if helpful else 0,
+        ).get("message")

@@ -86,6 +86,7 @@ class OpenAICompatClient:
         thought_parts: list[str] = []
         tool_acc: dict[int, dict] = {}  # index -> {id, name, args}
         finish_reason: str | None = None
+        usage: dict | None = None
         with self._open(payload) as res:
             for raw in res:
                 try:
@@ -101,6 +102,8 @@ class OpenAICompatClient:
                     obj = json.loads(data)
                 except Exception:
                     continue
+                if isinstance(obj, dict) and isinstance(obj.get("usage"), dict):
+                    usage = obj["usage"]
                 try:
                     choice = (obj.get("choices") or [{}])[0]
                 except Exception:
@@ -143,4 +146,5 @@ class OpenAICompatClient:
             "message": {"content": "".join(content_parts) or None, "tool_calls": calls or None},
             "thought": "".join(thought_parts) or None,
             "finish_reason": finish_reason,
+            "usage": usage,
         }

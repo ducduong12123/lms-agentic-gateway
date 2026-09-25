@@ -118,6 +118,12 @@
     ".acp-actions button:hover{background:#242424;color:#eee}.acp-actions button.on{background:#2a2a2a;color:#fff}",
     ".acp-src{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.acp-src span{font-size:11px;color:#8a8a8a;",
     "border:1px solid #2b2b2b;background:#181818;border-radius:6px;padding:3px 8px}",
+    ".acp-cite{margin-top:10px;font-size:11.5px;color:#8a8a8a}.acp-cite ol{margin:4px 0 0;padding-left:18px}",
+    ".acp-cite a{color:#9ab8ff;text-decoration:none}.acp-cite a:hover{text-decoration:underline}",
+    ".acp-tutor{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}",
+    ".acp-tutor button{font-size:11.5px;color:#cfcfcf;background:#181818;border:1px solid #2b2b2b;border-radius:6px;",
+    "padding:3px 8px;cursor:pointer}.acp-tutor button:disabled{opacity:.55;cursor:default}",
+    ".acp-tutor button.on{border-color:#6d8cff;color:#fff}.acp-tutor .acp-tutor-status{font-size:11px;color:#8a8a8a}",
     ".acp-think{margin:0 0 8px;background:transparent;border:0}",
     ".acp-think summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;color:#8a8a8a;font-size:12.5px;padding:2px 0}",
     ".acp-think summary::-webkit-details-marker{display:none}",
@@ -588,7 +594,78 @@
     d.className = "acp-u"; d.textContent = t;
     msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
   }
-  function addAssistant(answer, calls, approvals, timings, actions, directives) {
+  // F2 (lms_copilot): trích dẫn có link tới bài học, 👍/👎 và "Hỏi giáo viên". Chỉ dựng DOM bằng
+  // textContent từ thẻ tutor đóng do Gateway trả về; link chỉ nhận route /lms/courses/... .
+  function postCopilot(path, body) {
+    return fetch(GATEWAY + path, {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.detail || ("HTTP " + r.status));
+        return j;
+      });
+    });
+  }
+  function renderTutor(target, card) {
+    if (!card || card.kind !== "tutor") return;
+    var citations = Array.isArray(card.citations) ? card.citations : [];
+    if (citations.length) {
+      var cite = document.createElement("div");
+      cite.className = "acp-cite";
+      cite.appendChild(document.createTextNode("Nguồn trong khóa học:"));
+      var ol = document.createElement("ol");
+      citations.forEach(function (item) {
+        var li = document.createElement("li");
+        var route = String(item.route || "");
+        if (/^\/lms\/courses\/[^/]+\/learn\/\d+-\d+$/.test(route)) {
+          var a = document.createElement("a");
+          a.href = route;
+          a.textContent = item.label || item.lesson;
+          a.title = "Mở bài học · khối " + (item.block_id || "");
+          li.appendChild(a);
+        } else {
+          li.textContent = item.label || item.lesson;
+        }
+        ol.appendChild(li);
+      });
+      cite.appendChild(ol);
+      target.appendChild(cite);
+    }
+    var bar = document.createElement("div");
+    bar.className = "acp-tutor";
+    var status = document.createElement("span");
+    status.className = "acp-tutor-status";
+    if (card.conversation && card.message_index) {
+      [["👍", true, "Hữu ích"], ["👎", false, "Chưa hữu ích"]].forEach(function (spec) {
+        var b = document.createElement("button");
+        b.type = "button"; b.textContent = spec[0]; b.title = spec[2];
+        b.onclick = function () {
+          bar.querySelectorAll("button.rate").forEach(function (x) { x.disabled = true; });
+          postCopilot("/copilot/answers/rate", { conversation: card.conversation, message_index: card.message_index, helpful: spec[1] })
+            .then(function () { b.classList.add("on"); status.textContent = "Cảm ơn bạn đã đánh giá"; })
+            .catch(function (e) { status.textContent = "Chưa gửi được đánh giá: " + e.message; bar.querySelectorAll("button.rate").forEach(function (x) { x.disabled = false; }); });
+        };
+        b.classList.add("rate");
+        bar.appendChild(b);
+      });
+    }
+    if (card.course && !card.escalated) {
+      var ask = document.createElement("button");
+      ask.type = "button"; ask.textContent = "Hỏi giáo viên";
+      if (card.suggest_escalation) ask.classList.add("on");
+      ask.onclick = function () {
+        ask.disabled = true;
+        postCopilot("/copilot/escalate", { course: card.course, lesson: card.lesson || "", question: card.question || "", session_id: CONVERSATION_ID })
+          .then(function () { ask.textContent = "Đã gửi cho giáo viên"; status.textContent = "Giáo viên sẽ trả lời trong hàng chờ của lớp."; })
+          .catch(function (e) { ask.disabled = false; status.textContent = "Chưa chuyển được: " + e.message; });
+      };
+      bar.appendChild(ask);
+    }
+    bar.appendChild(status);
+    if (bar.children.length > 1) target.appendChild(bar);
+  }
+  function addAssistant(answer, calls, approvals, timings, actions, directives, tutorCard) {
     var d = document.createElement("div");
     d.className = "acp-a";
     var html = '<div class="body">' + md(answer || "(trống)") + "</div>" + srcChips(answer);
@@ -606,6 +683,7 @@
     });
     (actions || []).forEach(function (card) { appendActionCard(d, card); });
     (directives || []).forEach(handleDirective);
+    renderTutor(d, tutorCard);
     assistantActions(d);
     msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
   }
@@ -934,7 +1012,7 @@
         });
       }
       if (!r.body || !r.body.getReader) {
-        return r.json().then(function (j) { addAssistant(j.answer, j.tool_calls, j.approvals, j.timings, j.actions, j.directives); });
+        return r.json().then(function (j) { addAssistant(j.answer, j.tool_calls, j.approvals, j.timings, j.actions, j.directives, j.tutor); });
       }
       return streamSSE(r.body.getReader(), t0);
     }).catch(function (e) {
@@ -997,7 +1075,10 @@
       create_review_set: "Tạo bộ ôn tập", schedule_review: "Lên lịch ôn tập",
       set_goal: "Cập nhật mục tiêu", start_session: "Mở phiên học", navigate: "Mở trang LMS",
       render_view: "Mở khung Agentic", message_students: "Nhắn học viên",
-      create_live_class: "Tạo lớp trực tiếp", analyze_course_gaps: "Phân tích khoảng trống"
+      create_live_class: "Tạo lớp trực tiếp", analyze_course_gaps: "Phân tích khoảng trống",
+      copilot_search_course_content: "Tìm đoạn bài học để trích dẫn", copilot_get_lesson_content: "Đọc bài học (có trích dẫn)",
+      copilot_get_course_outline: "Đọc đề cương khóa học", copilot_escalate_to_teacher: "Chuyển câu hỏi cho giáo viên",
+      copilot_get_weekly_insight: "Đọc báo cáo điểm vướng tuần"
     };
     function toolVi(name) { return TOOL_VI[name] || name; }
     function pushSummary(text) {
@@ -1068,6 +1149,7 @@
       });
       (ev.actions || []).forEach(function (card) { appendActionCard(box, card); });
       if (!box.dataset.directiveSeen) (ev.directives || []).forEach(handleDirective);
+      renderTutor(box, ev.tutor);
       assistantActions(box);
       msgs.scrollTop = msgs.scrollHeight;
     }

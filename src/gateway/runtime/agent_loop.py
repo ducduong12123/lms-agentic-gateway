@@ -5,7 +5,7 @@ import json
 import time
 import unicodedata
 
-from . import course_projects, features, runs
+from . import course_projects, features, runs, tutor
 from .actions import record_action
 from .approval import audit, request_approval
 from .learner import concepts_for_lesson, format_learner_block, weak_concepts
@@ -13,7 +13,41 @@ from .policy import COPILOT_PREFIX, allowed_tools
 from .long_memory import format_memories_block
 from .tool_bundles import plan_request, summary_for_tools, write_reversibility
 from ..tools.envelope import action_result, reversibility_contract_label
+from ..tools.copilot_bridge import WEEKLY_INSIGHT_TOOL
 from .trace import trace as _trace
+
+
+_SYSTEM_PROMPT = (
+    "Bạn là gia sư LMS biết từng người học. Chỉ dùng tool được cấp. "
+    "Mọi câu trả lời về khóa học phải kèm nguồn dạng `LMS Course: <tên>, Course Lesson: <tên>`. "
+    "Với thống kê học viên/risk của teacher hoặc admin, dùng nguồn `engine ITS evidence/mastery`; "
+    "không bịa nguồn LMS Course/Course Lesson và không ghi các placeholder như ‘Toàn bộ dữ liệu’ hoặc ‘Không áp dụng’. "
+    "Không bịa đặt, không truy cập dữ liệu ngoài tool. "
+    "Đọc các lượt trao đổi gần đây để nối ngữ cảnh; nếu người dùng nói ‘bài này’, ‘nó’ hoặc chỉ bổ sung một phần thông tin, "
+    "hãy kết hợp với yêu cầu trước đó thay vì hỏi lại. "
+    "Nếu người dùng nói 'lưu vào lms', 'lưu bài', 'xuất bản', 'tạo bài', 'ghi vào khóa học' thì đây là yêu cầu LƯU BÀI, "
+    "BẮT BUỘC gọi publish_lesson_draft ngay (teacher/admin), không chỉ soạn nháp bằng chữ. "
+    "Dùng course = LMS Course name/id từ search_courses hoặc route; dùng chapter từ get_course_outline (id/chapter_id); "
+    "dùng lại title + body đầy đủ của bản nháp trong lịch sử gần nhất; để trống lesson khi tạo bài mới. "
+    "Nếu thiếu course/chapter/body thì gọi search_courses/get_course_outline trước, không hỏi lại trừ khi thật sự không có. "
+    "Tool ghi luôn cần phê duyệt: sau khi gọi, báo có nút 'Duyệt & chạy' trong khung phê duyệt/hành động. "
+    "Nếu role là teacher hoặc admin và người dùng hỏi học viên yếu nhất, học viên nguy cơ, progress thấp, "
+    "ai cần hỗ trợ, hoặc lý do học viên yếu, BẮT BUỘC gọi list_at_risk_students ngay cả khi chưa nêu khóa học/batch; "
+    "dùng course='' để xem toàn bộ dữ liệu và không hỏi lại tên khóa/batch. Tool đã xếp người yếu nhất trước; "
+    "chỉ lọc theo course khi người dùng nêu rõ phạm vi. Sau khi có kết quả tool, trả lời trực tiếp tên học viên, "
+    "điểm yếu và evidence/reasons, không yêu cầu người dùng cung cấp thêm phạm vi. "
+    "Ưu tiên nhắc đúng concept yếu đã bơm trong prompt; mỗi gợi ý phải kèm vì sao "
+    "(evidence gần nhất). Nếu học viên nói ‘không đúng’, gọi record_feedback_correction. "
+    "Với yêu cầu tạo khóa học mới nhiều module, BẮT BUỘC gọi update_course_project với operation=create "
+    "trước khi tạo LMS Course để lưu brief, audience, outcomes, constraints, module_plan và next_actions. "
+    "Mỗi lượt tiếp theo đọc active_project hoặc gọi get_course_project; sau mỗi thay đổi đã duyệt, "
+    "checkpoint completed_items/current_focus/next_actions. Không dùng lịch sử chat làm nguồn chuẩn dự án. "
+    "Khi người dùng nói rõ một thông tin bền vững (tên gọi, mục tiêu, trình độ, sở thích học), "
+    "gọi remember_user_fact để lưu. Khi câu hỏi cần thông tin đã biết trước đây, "
+    "gọi recall_user_facts trước khi trả lời. Không bao giờ lưu mật khẩu/OTP/bí mật. "
+    "Nếu giáo viên hỏi lớp vướng ở đâu/điểm vướng tuần này và có tool copilot_get_weekly_insight, gọi tool đó "
+    "với course hiện tại; tóm tắt các nhóm (con số lấy nguyên từ tool, không tự đếm) và gửi kèm link báo cáo."
+)
 
 
 def _memory_block(context: dict) -> str:
@@ -132,6 +166,27 @@ def _plan_block(context: dict) -> str:
     )
 
 
+def _allowed(role: str, registry, context: dict) -> list[str]:
+    allowed = allowed_tools(role, registry)
+    if context.get("_tutor"):
+        # Có lms_copilot: nội dung bài lấy từ khối trích dẫn được, không từ get_lesson_context.
+        allowed = [name for name in allowed if name != "get_lesson_context"]
+    return allowed
+
+
+def _add_usage(context: dict, usage) -> None:
+    """Cộng dồn token của lượt (nếu provider trả usage) để ghi vào Copilot Tool Log."""
+    if not isinstance(usage, dict):
+        return
+    total = context.setdefault("_usage", {"tokens_in": 0, "tokens_out": 0})
+    total["tokens_in"] += int(usage.get("prompt_tokens") or 0)
+    total["tokens_out"] += int(usage.get("completion_tokens") or 0)
+
+
+def _model_name(client) -> str:
+    return str(getattr(client, "model", "") or "")
+
+
 def _prepare_run(context: dict, user_msg: str, role: str, registry=None) -> dict:
     # Chỉ mở bundle copilot.lms khi site có cài lms_copilot và user có tool copilot_*.
     has_copilot = registry is not None and any(name.startswith(COPILOT_PREFIX) for name in registry.names())
@@ -142,6 +197,10 @@ def _prepare_run(context: dict, user_msg: str, role: str, registry=None) -> dict
         context.get("workflow_state") if isinstance(context.get("workflow_state"), dict) else {},
         copilot=has_copilot,
     )
+    # F2: học viên + lms_copilot -> trả lời từ khối bài học có trích dẫn.
+    context["_tutor"] = tutor.is_active(role, registry)
+    if context["_tutor"]:
+        context["_offscope"] = tutor.is_offscope(user_msg)
     member = str(context.get("user") or "")
     session_id = str(context.get("session_id") or "")
     if member and member != "Guest" and session_id:
@@ -150,6 +209,8 @@ def _prepare_run(context: dict, user_msg: str, role: str, registry=None) -> dict
         stored = run.get("plan")
         if isinstance(stored, dict) and stored:
             plan = stored
+    if context["_tutor"] and "copilot.lms" not in (plan.get("bundles") or []):
+        plan = {**plan, "bundles": [*(plan.get("bundles") or []), "copilot.lms"]}
     context["_plan"] = plan
     return plan
 
@@ -160,15 +221,22 @@ def _initial_messages(system: str, user_msg: str, context: dict) -> list[dict]:
     block = _memory_block(context)
     if block:
         messages.append({"role": "system", "content": block})
-    tutor = _learner_block(context)
-    if tutor:
-        messages.append({"role": "system", "content": tutor})
-    route = _route_block(context)
-    if route:
-        messages.append({"role": "system", "content": route})
-    lesson = _lesson_block(context)
-    if lesson:
-        messages.append({"role": "system", "content": lesson})
+    learner_block = _learner_block(context)
+    if learner_block:
+        messages.append({"role": "system", "content": learner_block})
+    if context.get("_tutor"):
+        # Không bơm cả bài vào prompt: nội dung phải đọc qua tool để có block_id trích dẫn.
+        messages.append({"role": "system", "content": tutor.prompt_block(context)})
+        pointer = tutor.lesson_pointer(context)
+        if pointer:
+            messages.append({"role": "system", "content": pointer})
+    else:
+        route = _route_block(context)
+        if route:
+            messages.append({"role": "system", "content": route})
+        lesson = _lesson_block(context)
+        if lesson:
+            messages.append({"role": "system", "content": lesson})
     workflow = _workflow_block(context)
     if workflow:
         messages.append({"role": "system", "content": workflow})
@@ -403,6 +471,7 @@ def _run_tool(registry, allowed: list, role: str, name: str, args: dict, context
         out = tool.func(args)
     except Exception as e:  # noqa: BLE001 - tra loi ve cho LLM
         out = {"error": str(e)}
+    tutor.annotate_citable(name, out)
     if step_id:
         status = "failed" if isinstance(out, dict) and out.get("error") else "completed"
         runs.finish_step(step_id, out, status)
@@ -492,6 +561,41 @@ def _preflight_risk(registry, allowed: list, role: str, user_msg: str, context: 
         "ms": int((time.perf_counter() - started) * 1000),
     }
 
+def _weekly_intent(role: str, user_msg: str) -> bool:
+    if role not in {"teacher", "admin"}:
+        return False
+    text = unicodedata.normalize("NFD", str(user_msg or "")).encode("ascii", "ignore").decode().casefold()
+    text = " ".join(text.split())
+    return any(
+        phrase in text
+        for phrase in ("vuong o dau", "diem vuong", "lop vuong", "hoc vien vuong", "bi vuong", "stuck")
+    )
+
+
+def _preflight_weekly(registry, allowed: list, role: str, user_msg: str, context: dict):
+    """F4: "Tuần này lớp vướng ở đâu?" -> đọc báo cáo tuần (chạy job nếu chưa có) cho khóa đang mở."""
+    if WEEKLY_INSIGHT_TOOL not in allowed or not _weekly_intent(role, user_msg):
+        return None
+    route = context.get("route") if isinstance(context.get("route"), dict) else {}
+    workflow = context.get("workflow_state") if isinstance(context.get("workflow_state"), dict) else {}
+    course = str(route.get("course") or workflow.get("active_course") or "")
+    if not course:
+        return None
+    args = {"course": course}
+    wire_args = dict(args)
+    started = time.perf_counter()
+    out, approval = _run_tool(registry, allowed, role, WEEKLY_INSIGHT_TOOL, args, context)
+    return {
+        "id": "preflight-weekly",
+        "name": WEEKLY_INSIGHT_TOOL,
+        "wire_args": wire_args,
+        "args": args,
+        "result": out,
+        "approval": approval,
+        "ms": int((time.perf_counter() - started) * 1000),
+    }
+
+
 def _publish_intent(user_msg: str) -> bool:
     text = unicodedata.normalize("NFD", str(user_msg or "")).encode("ascii", "ignore").decode().casefold()
     text = " ".join(text.split())
@@ -573,39 +677,11 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
     t0 = time.perf_counter()
     timings: dict = {"ttft_ms": None, "llm_ms": 0, "tools_ms": 0}
     context = context or {}
-    allowed = allowed_tools(role, registry)
     plan = _prepare_run(context, user_msg, role, registry)
+    allowed = _allowed(role, registry, context)
     schemas = registry.schemas(allowed, set(plan.get("bundles") or []))
 
-    system = (
-        "Bạn là gia sư LMS biết từng người học. Chỉ dùng tool được cấp. "
-        "Mọi câu trả lời về khóa học phải kèm nguồn dạng `LMS Course: <tên>, Course Lesson: <tên>`. "
-        "Với thống kê học viên/risk của teacher hoặc admin, dùng nguồn `engine ITS evidence/mastery`; "
-        "không bịa nguồn LMS Course/Course Lesson và không ghi các placeholder như ‘Toàn bộ dữ liệu’ hoặc ‘Không áp dụng’. "
-        "Không bịa đặt, không truy cập dữ liệu ngoài tool. "
-        "Đọc các lượt trao đổi gần đây để nối ngữ cảnh; nếu người dùng nói ‘bài này’, ‘nó’ hoặc chỉ bổ sung một phần thông tin, "
-        "hãy kết hợp với yêu cầu trước đó thay vì hỏi lại. "
-        "Nếu người dùng nói 'lưu vào lms', 'lưu bài', 'xuất bản', 'tạo bài', 'ghi vào khóa học' thì đây là yêu cầu LƯU BÀI, "
-        "BẮT BUỘC gọi publish_lesson_draft ngay (teacher/admin), không chỉ soạn nháp bằng chữ. "
-        "Dùng course = LMS Course name/id từ search_courses hoặc route; dùng chapter từ get_course_outline (id/chapter_id); "
-        "dùng lại title + body đầy đủ của bản nháp trong lịch sử gần nhất; để trống lesson khi tạo bài mới. "
-        "Nếu thiếu course/chapter/body thì gọi search_courses/get_course_outline trước, không hỏi lại trừ khi thật sự không có. "
-        "Tool ghi luôn cần phê duyệt: sau khi gọi, báo có nút 'Duyệt & chạy' trong khung phê duyệt/hành động. "
-        "Nếu role là teacher hoặc admin và người dùng hỏi học viên yếu nhất, học viên nguy cơ, progress thấp, "
-        "ai cần hỗ trợ, hoặc lý do học viên yếu, BẮT BUỘC gọi list_at_risk_students ngay cả khi chưa nêu khóa học/batch; "
-        "dùng course='' để xem toàn bộ dữ liệu và không hỏi lại tên khóa/batch. Tool đã xếp người yếu nhất trước; "
-        "chỉ lọc theo course khi người dùng nêu rõ phạm vi. Sau khi có kết quả tool, trả lời trực tiếp tên học viên, "
-        "điểm yếu và evidence/reasons, không yêu cầu người dùng cung cấp thêm phạm vi. "
-        "Ưu tiên nhắc đúng concept yếu đã bơm trong prompt; mỗi gợi ý phải kèm vì sao "
-        "(evidence gần nhất). Nếu học viên nói ‘không đúng’, gọi record_feedback_correction. "
-        "Với yêu cầu tạo khóa học mới nhiều module, BẮT BUỘC gọi update_course_project với operation=create "
-        "trước khi tạo LMS Course để lưu brief, audience, outcomes, constraints, module_plan và next_actions. "
-        "Mỗi lượt tiếp theo đọc active_project hoặc gọi get_course_project; sau mỗi thay đổi đã duyệt, "
-        "checkpoint completed_items/current_focus/next_actions. Không dùng lịch sử chat làm nguồn chuẩn dự án. "
-        "Khi người dùng nói rõ một thông tin bền vững (tên gọi, mục tiêu, trình độ, sở thích học), "
-        "gọi remember_user_fact để lưu. Khi câu hỏi cần thông tin đã biết trước đây, "
-        "gọi recall_user_facts trước khi trả lời. Không bao giờ lưu mật khẩu/OTP/bí mật."
-    )
+    system = _SYSTEM_PROMPT
     messages = _initial_messages(system, user_msg, context)
     tool_calls_log: list = []
     approvals: list = []
@@ -627,7 +703,10 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
             "Bản nháp đã sẵn sàng. Hãy bấm “Duyệt & chạy” để lưu vào LMS.",
             tool_calls_log, approvals, timings, context,
         )
-    preflight = _preflight_risk(registry, allowed, role, user_msg, context)
+    preflight = (
+        _preflight_risk(registry, allowed, role, user_msg, context)
+        or _preflight_weekly(registry, allowed, role, user_msg, context)
+    )
     if preflight:
         call_id = preflight["id"]
         messages.append({
@@ -668,13 +747,21 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
         if timings["ttft_ms"] is None:
             timings["ttft_ms"] = int((time.perf_counter() - t0) * 1000)
         timings["llm_ms"] += int((time.perf_counter() - t_llm) * 1000)
+        _add_usage(context, res.get("usage") if isinstance(res, dict) else None)
         msg = res["choices"][0]["message"]
         messages.append({"role": "assistant", "content": msg.get("content"), "tool_calls": msg.get("tool_calls")})
 
         calls = msg.get("tool_calls") or []
         if not calls:
+            answer, card = tutor.finish_turn(
+                registry, role, user_msg, msg.get("content") or "", tool_calls_log, context,
+                model=_model_name(client),
+            )
             timings["total_ms"] = int((time.perf_counter() - t0) * 1000)
-            return _agent_result(msg.get("content") or "", tool_calls_log, approvals, timings, context)
+            result = _agent_result(answer, tool_calls_log, approvals, timings, context)
+            if card:
+                result["tutor"] = card
+            return result
 
         t_tools = time.perf_counter()
         for call in calls:
@@ -708,42 +795,15 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
     t0 = time.perf_counter()
     timings: dict = {"ttft_ms": None, "llm_ms": 0, "tools_ms": 0}
     context = context or {}
-    allowed = allowed_tools(role, registry)
     plan = _prepare_run(context, user_msg, role, registry)
+    allowed = _allowed(role, registry, context)
     schemas = registry.schemas(allowed, set(plan.get("bundles") or []))
-    system = (
-        "Bạn là gia sư LMS biết từng người học. Chỉ dùng tool được cấp. "
-        "Mọi câu trả lời về khóa học phải kèm nguồn dạng `LMS Course: <tên>, Course Lesson: <tên>`. "
-        "Với thống kê học viên/risk của teacher hoặc admin, dùng nguồn `engine ITS evidence/mastery`; "
-        "không bịa nguồn LMS Course/Course Lesson và không ghi các placeholder như ‘Toàn bộ dữ liệu’ hoặc ‘Không áp dụng’. "
-        "Không bịa đặt, không truy cập dữ liệu ngoài tool. "
-        "Đọc các lượt trao đổi gần đây để nối ngữ cảnh; nếu người dùng nói ‘bài này’, ‘nó’ hoặc chỉ bổ sung một phần thông tin, "
-        "hãy kết hợp với yêu cầu trước đó thay vì hỏi lại. "
-        "Nếu người dùng nói 'lưu vào lms', 'lưu bài', 'xuất bản', 'tạo bài', 'ghi vào khóa học' thì đây là yêu cầu LƯU BÀI, "
-        "BẮT BUỘC gọi publish_lesson_draft ngay (teacher/admin), không chỉ soạn nháp bằng chữ. "
-        "Dùng course = LMS Course name/id từ search_courses hoặc route; dùng chapter từ get_course_outline (id/chapter_id); "
-        "dùng lại title + body đầy đủ của bản nháp trong lịch sử gần nhất; để trống lesson khi tạo bài mới. "
-        "Nếu thiếu course/chapter/body thì gọi search_courses/get_course_outline trước, không hỏi lại trừ khi thật sự không có. "
-        "Tool ghi luôn cần phê duyệt: sau khi gọi, báo có nút 'Duyệt & chạy' trong khung phê duyệt/hành động. "
-        "Nếu role là teacher hoặc admin và người dùng hỏi học viên yếu nhất, học viên nguy cơ, progress thấp, "
-        "ai cần hỗ trợ, hoặc lý do học viên yếu, BẮT BUỘC gọi list_at_risk_students ngay cả khi chưa nêu khóa học/batch; "
-        "dùng course='' để xem toàn bộ dữ liệu và không hỏi lại tên khóa/batch. Tool đã xếp người yếu nhất trước; "
-        "chỉ lọc theo course khi người dùng nêu rõ phạm vi. Sau khi có kết quả tool, trả lời trực tiếp tên học viên, "
-        "điểm yếu và evidence/reasons, không yêu cầu người dùng cung cấp thêm phạm vi. "
-        "Ưu tiên nhắc đúng concept yếu đã bơm trong prompt; mỗi gợi ý phải kèm vì sao "
-        "(evidence gần nhất). Nếu học viên nói ‘không đúng’, gọi record_feedback_correction. "
-        "Với yêu cầu tạo khóa học mới nhiều module, BẮT BUỘC gọi update_course_project với operation=create "
-        "trước khi tạo LMS Course để lưu brief, audience, outcomes, constraints, module_plan và next_actions. "
-        "Mỗi lượt tiếp theo đọc active_project hoặc gọi get_course_project; sau mỗi thay đổi đã duyệt, "
-        "checkpoint completed_items/current_focus/next_actions. Không dùng lịch sử chat làm nguồn chuẩn dự án. "
-        "Khi người dùng nói rõ một thông tin bền vững (tên gọi, mục tiêu, trình độ, sở thích học), "
-        "gọi remember_user_fact để lưu. Khi câu hỏi cần thông tin đã biết trước đây, "
-        "gọi recall_user_facts trước khi trả lời. Không bao giờ lưu mật khẩu/OTP/bí mật."
-    )
+    system = _SYSTEM_PROMPT
     messages = _initial_messages(system, user_msg, context)
     tool_calls_log: list = []
     approvals: list = []
     answer = ""
+    tutor_card = None
     yield {"t": "plan", "run_id": str(context.get("_run_id") or ""), "plan": plan}
     yield {"t": "summary", "text": summary_for_tools([])}
     publish = _preflight_publish(registry, allowed, role, user_msg, context)
@@ -787,7 +847,10 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
             "reasoning_summary": reasoning_summary,
         }
         return
-    preflight = _preflight_risk(registry, allowed, role, user_msg, context)
+    preflight = (
+        _preflight_risk(registry, allowed, role, user_msg, context)
+        or _preflight_weekly(registry, allowed, role, user_msg, context)
+    )
     if preflight:
         call_id = preflight["id"]
         messages.append({
@@ -853,17 +916,22 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
                 "message": res["choices"][0]["message"],
                 "thought": None,
                 "finish_reason": None,
+                "usage": res.get("usage") if isinstance(res, dict) else None,
             }
             yield {"t": "summary", "text": "Luồng trực tiếp bị gián đoạn; hệ thống đã chuyển sang chế độ xử lý thường."}
         timings["llm_ms"] += int((time.perf_counter() - t_llm) * 1000)
         if timings["ttft_ms"] is None:
             timings["ttft_ms"] = int((time.perf_counter() - t0) * 1000)
+        _add_usage(context, (streamed_msg or {}).get("usage"))
         msg: dict = dict((streamed_msg or {}).get("message") or {})
         messages.append({"role": "assistant", "content": msg.get("content"), "tool_calls": msg.get("tool_calls")})
 
         calls = msg.get("tool_calls") or []
         if not calls:
-            answer = msg.get("content") or ""
+            answer, tutor_card = tutor.finish_turn(
+                registry, role, user_msg, msg.get("content") or "", tool_calls_log, context,
+                model=_model_name(client),
+            )
             break
 
         t_tools = time.perf_counter()
@@ -912,7 +980,7 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
     reasoning_summary = summary_for_tools(
         [str(item.get("tool") or "") for item in tool_calls_log],
     )
-    yield {
+    done = {
         "t": "done",
         "answer": answer,
         "tool_calls": tool_calls_log,
@@ -924,3 +992,6 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
         "plan": plan,
         "reasoning_summary": reasoning_summary,
     }
+    if tutor_card:
+        done["tutor"] = tutor_card
+    yield done
