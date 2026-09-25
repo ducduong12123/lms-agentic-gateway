@@ -115,3 +115,32 @@ class FrappeClient:
 
     def get_method(self, dotted: str, **kwargs):
         return self._call("GET", f"/api/method/{dotted}", params=kwargs)
+
+    # --- lms_copilot (Frappe app cài cạnh lms): tool API có lọc role và ghi Tool Log ---
+    def get_copilot_tools(self) -> list[dict]:
+        """Catalog tool lms_copilot cho user hiện tại; site chưa cài app thì trả []."""
+        try:
+            message = self.get_method("lms_copilot.api.get_tools").get("message") or {}
+        except RuntimeError:
+            return []
+        return list(message.get("tools") or [])
+
+    def call_copilot_tool(
+        self,
+        tool: str,
+        arguments: dict | None = None,
+        conversation: str | None = None,
+        model: str | None = None,
+        tokens_in: int | None = None,
+        tokens_out: int | None = None,
+    ):
+        body: dict = {"tool": tool, "arguments": arguments or {}}
+        for key, value in (
+            ("conversation", conversation),
+            ("model", model),
+            ("tokens_in", tokens_in),
+            ("tokens_out", tokens_out),
+        ):
+            if value is not None:
+                body[key] = value
+        return self._call("POST", "/api/method/lms_copilot.api.call_tool", body=body).get("message")

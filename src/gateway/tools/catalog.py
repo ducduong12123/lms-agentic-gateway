@@ -14,6 +14,7 @@ from .verbs_student import register as register_student_verbs
 from .verbs_client import register as register_client_verbs
 from .verbs_teacher import register as register_teacher_verbs
 from .verbs_course_authoring import register as register_course_authoring_verbs
+from .copilot_bridge import register as register_copilot_tools
 
 STUDENT_SAFE_LESSON_FIELDS = ["name", "title", "body", "content", "quiz_id", "course", "chapter", "include_in_preview"]
 
@@ -338,4 +339,6 @@ def build_registry(frappe: FrappeClient, llm=None) -> ToolRegistry:
     register_client_verbs(reg)
     register_student_verbs(reg, frappe, llm)
     configure_registry(reg)
+    # Sau configure_registry: tool copilot_* mang sẵn bundle copilot.lms, không nằm trong BUNDLES tĩnh.
+    register_copilot_tools(reg, frappe)
     return reg

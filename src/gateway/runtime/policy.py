@@ -98,5 +98,13 @@ POLICY: dict[str, list[str]] = {
 }
 
 
-def allowed_tools(role: str) -> list[str]:
-    return POLICY.get(role, POLICY["student"])
+# Tool lms_copilot được đăng ký động theo catalog mà Frappe trả cho chính user này,
+# nên mọi tool copilot_* có trong registry đều đã qua lọc role ở phía Frappe.
+COPILOT_PREFIX = "copilot_"
+
+
+def allowed_tools(role: str, registry=None) -> list[str]:
+    allowed = list(POLICY.get(role, POLICY["student"]))
+    if registry is not None:
+        allowed += [name for name in registry.names() if name.startswith(COPILOT_PREFIX)]
+    return allowed

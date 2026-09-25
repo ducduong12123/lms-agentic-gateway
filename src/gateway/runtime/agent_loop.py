@@ -9,7 +9,7 @@ from . import course_projects, features, runs
 from .actions import record_action
 from .approval import audit, request_approval
 from .learner import concepts_for_lesson, format_learner_block, weak_concepts
-from .policy import allowed_tools
+from .policy import COPILOT_PREFIX, allowed_tools
 from .long_memory import format_memories_block
 from .tool_bundles import plan_request, summary_for_tools, write_reversibility
 from ..tools.envelope import action_result, reversibility_contract_label
@@ -132,12 +132,15 @@ def _plan_block(context: dict) -> str:
     )
 
 
-def _prepare_run(context: dict, user_msg: str, role: str) -> dict:
+def _prepare_run(context: dict, user_msg: str, role: str, registry=None) -> dict:
+    # Chỉ mở bundle copilot.lms khi site có cài lms_copilot và user có tool copilot_*.
+    has_copilot = registry is not None and any(name.startswith(COPILOT_PREFIX) for name in registry.names())
     plan = plan_request(
         user_msg,
         role,
         context.get("route") if isinstance(context.get("route"), dict) else {},
         context.get("workflow_state") if isinstance(context.get("workflow_state"), dict) else {},
+        copilot=has_copilot,
     )
     member = str(context.get("user") or "")
     session_id = str(context.get("session_id") or "")
@@ -570,8 +573,8 @@ def run_agent(client, registry, role: str, user_msg: str, context: dict | None =
     t0 = time.perf_counter()
     timings: dict = {"ttft_ms": None, "llm_ms": 0, "tools_ms": 0}
     context = context or {}
-    allowed = allowed_tools(role)
-    plan = _prepare_run(context, user_msg, role)
+    allowed = allowed_tools(role, registry)
+    plan = _prepare_run(context, user_msg, role, registry)
     schemas = registry.schemas(allowed, set(plan.get("bundles") or []))
 
     system = (
@@ -705,8 +708,8 @@ def run_agent_stream(client, registry, role: str, user_msg: str, context: dict |
     t0 = time.perf_counter()
     timings: dict = {"ttft_ms": None, "llm_ms": 0, "tools_ms": 0}
     context = context or {}
-    allowed = allowed_tools(role)
-    plan = _prepare_run(context, user_msg, role)
+    allowed = allowed_tools(role, registry)
+    plan = _prepare_run(context, user_msg, role, registry)
     schemas = registry.schemas(allowed, set(plan.get("bundles") or []))
     system = (
         "Bạn là gia sư LMS biết từng người học. Chỉ dùng tool được cấp. "

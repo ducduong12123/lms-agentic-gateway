@@ -56,6 +56,12 @@ BUNDLES: dict[str, ToolBundle] = {
         "class.operations", "Vận hành lớp học", "Liên lạc học viên và tổ chức lớp trực tiếp.",
         frozenset({"message_students", "create_live_class"}),
     ),
+    # Tool đăng ký động từ lms_copilot (tools/copilot_bridge.py), nên danh sách tĩnh để trống.
+    "copilot.lms": ToolBundle(
+        "copilot.lms", "Trợ giảng Copilot",
+        "Rubric, bài nộp dự án, nhận xét nháp, hỏi đáp có trích dẫn và điểm vướng của lớp.",
+        frozenset(),
+    ),
     "client.ui": ToolBundle(
         "client.ui", "Điều khiển giao diện", "Điều hướng LMS và hiển thị view đã kiểm soát.",
         frozenset({"navigate", "render_view"}),
@@ -131,6 +137,7 @@ def select_bundles(
     role: str,
     route: dict[str, object] | None = None,
     workflow: dict[str, object] | None = None,
+    copilot: bool = False,
 ) -> list[str]:
     """Select a small deterministic capability set; execution policy remains authoritative."""
     text = _plain(message)
@@ -182,6 +189,12 @@ def select_bundles(
     if _has(text, "mo trang", "dieu huong", "hien thi", "xem tren lms"):
         selected.add("client.ui")
 
+    if copilot and _has(text, "nhan xet", "rubric", "du an", "vuong", "hang cho", "de xuat", "tro giang",
+            "hoi giao vien", "trich dan", "tuan nay", "bai tap"):
+        selected.add("copilot.lms")
+    if copilot and selected.intersection({"course.read", "analytics.learning"}):
+        selected.add("copilot.lms")
+
     if role in {"teacher", "admin"} and "course.authoring" in selected:
         selected.update({"analytics.learning", "course.workspace"})
     if not selected:
@@ -194,8 +207,9 @@ def plan_request(
     role: str,
     route: dict[str, object] | None = None,
     workflow: dict[str, object] | None = None,
+    copilot: bool = False,
 ) -> dict[str, object]:
-    bundles = select_bundles(message, role, route, workflow)
+    bundles = select_bundles(message, role, route, workflow, copilot)
     steps: list[dict[str, str]] = []
     if "course.read" in bundles:
         steps.append({"id": "discover", "label": "Xác định khóa học và ngữ cảnh", "status": "pending"})
