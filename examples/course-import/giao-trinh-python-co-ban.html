@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Giáo trình Python cơ bản</title>
+<style>
+	body { font-family: "DejaVu Serif", serif; font-size: 13pt; line-height: 1.55; margin: 0 24px; }
+	h1 { font-size: 22pt; } h2 { font-size: 17pt; margin-top: 0; }
+	pre { background: #f3f3f3; padding: 8px 12px; font-size: 11pt; }
+	.page { page-break-after: always; }
+	.cover { text-align: center; padding-top: 180px; }
+</style>
+</head>
+<body>
+
+<div class="page cover">
+<h1>GIÁO TRÌNH PYTHON CƠ BẢN</h1>
+<p>Dành cho người mới bắt đầu lập trình</p>
+<p>Học phần 2 tín chỉ · 8 buổi · Tài liệu nội bộ</p>
+<p>Khoa Công nghệ Giáo dục</p>
+</div>
+
+<div class="page">
+<h2>Lời nói đầu và mục tiêu học phần</h2>
+<p>Học phần giúp người học chưa từng lập trình viết được các chương trình Python nhỏ để xử lý dữ liệu hằng ngày: tính toán, lọc danh sách, đọc ghi tệp. Sau học phần, người học có thể:</p>
+<ul>
+<li>Cài đặt Python và chạy chương trình từ tệp .py.</li>
+<li>Dùng biến, kiểu dữ liệu cơ bản và phép toán.</li>
+<li>Viết câu lệnh điều kiện và vòng lặp để xử lý danh sách.</li>
+<li>Tách chương trình thành các hàm có tên rõ ràng.</li>
+<li>Làm việc với list và dict, đọc ghi tệp văn bản và JSON.</li>
+</ul>
+<p>Đánh giá: bài tập hằng tuần 40%, dự án cuối khóa 60%. Dự án được chấm theo rubric công bố cùng đề bài.</p>
+</div>
+
+<div class="page">
+<h2>Chương 1. Làm quen với Python</h2>
+<p>Python là ngôn ngữ lập trình thông dịch, cú pháp gần với ngôn ngữ tự nhiên. Chương trình Python là một tệp văn bản có đuôi <code>.py</code>, được trình thông dịch đọc và thực hiện từ trên xuống dưới.</p>
+<p><b>Cài đặt.</b> Tải Python 3 từ python.org, khi cài trên Windows nhớ chọn "Add Python to PATH". Kiểm tra bằng lệnh <code>python --version</code> trong cửa sổ dòng lệnh.</p>
+<p><b>Chương trình đầu tiên.</b></p>
+<pre>print("Xin chào, Python!")</pre>
+<p>Lưu thành <code>hello.py</code> rồi chạy <code>python hello.py</code>. Hàm <code>print</code> in giá trị ra màn hình. Mỗi câu lệnh nằm trên một dòng; Python dùng thụt lề (4 dấu cách) để nhóm câu lệnh thay cho dấu ngoặc nhọn.</p>
+<p><b>Chú thích</b> bắt đầu bằng dấu <code>#</code> và bị trình thông dịch bỏ qua. Viết chú thích để giải thích <i>vì sao</i>, không lặp lại điều code đã nói rõ.</p>
+</div>
+
+<div class="page">
+<h2>Chương 2. Biến và kiểu dữ liệu</h2>
+<p>Biến là tên gắn với một giá trị. Gán giá trị bằng dấu <code>=</code>:</p>
+<pre>ten = "An"
+tuoi = 20
+chieu_cao = 1.68
+dang_hoc = True</pre>
+<p>Bốn kiểu cơ bản: <code>int</code> (số nguyên), <code>float</code> (số thực), <code>str</code> (chuỗi), <code>bool</code> (đúng/sai). Hàm <code>type()</code> cho biết kiểu của giá trị.</p>
+<p><b>Quy tắc đặt tên:</b> chữ thường, nối bằng dấu gạch dưới (<code>so_tien</code>, <code>tong_chi</code>), không bắt đầu bằng chữ số, không trùng từ khóa. Tên biến nên nói rõ ý nghĩa: <code>tong_chi</code> tốt hơn <code>t</code> hay <code>x1</code>.</p>
+<p><b>Chuyển kiểu:</b> <code>int("12")</code>, <code>float("3.5")</code>, <code>str(10)</code>. Dữ liệu người dùng nhập bằng <code>input()</code> luôn là chuỗi, cần chuyển kiểu trước khi tính toán.</p>
+</div>
+
+<div class="page">
+<h2>Chương 3. Phép toán và biểu thức</h2>
+<p>Phép toán số học: <code>+ - * /</code>, chia lấy phần nguyên <code>//</code>, chia lấy dư <code>%</code>, lũy thừa <code>**</code>. Phép <code>/</code> luôn trả về float.</p>
+<pre>tong = 120000 + 45000
+trung_binh = tong / 2
+so_chan = 10 % 2 == 0</pre>
+<p>Phép so sánh: <code>== != &lt; &gt; &lt;= &gt;=</code> trả về bool. Phép logic: <code>and</code>, <code>or</code>, <code>not</code>.</p>
+<p><b>f-string</b> giúp chèn giá trị vào chuỗi:</p>
+<pre>print(f"Tổng chi: {tong:,} đồng")</pre>
+<p>Lỗi thường gặp: cộng chuỗi với số (<code>"Tổng: " + 5</code>) gây <code>TypeError</code>; hãy dùng f-string hoặc <code>str()</code>.</p>
+</div>
+
+<div class="page">
+<h2>Chương 4. Câu lệnh điều kiện</h2>
+<p>Câu lệnh <code>if</code> cho phép chương trình chọn nhánh thực hiện:</p>
+<pre>if so_tien &gt; 500000:
+    print("Khoản chi lớn")
+elif so_tien &gt; 100000:
+    print("Khoản chi vừa")
+else:
+    print("Khoản chi nhỏ")</pre>
+<p>Chỉ một nhánh được chạy: nhánh đầu tiên có điều kiện đúng. Thân mỗi nhánh phải thụt lề cùng mức.</p>
+<p>Điều kiện có thể kết hợp: <code>if tuoi &gt;= 18 and co_the:</code>. Tránh lồng quá nhiều tầng <code>if</code>; khi điều kiện phức tạp, đặt nó vào một biến có tên rõ nghĩa, ví dụ <code>la_khoan_bat_thuong = so_tien &gt; 5 * trung_binh</code>.</p>
+</div>
+
+<div class="page">
+<h2>Chương 5. Vòng lặp for và while</h2>
+<p>Vòng lặp <code>for</code> duyệt lần lượt từng phần tử của một dãy:</p>
+<pre>khoan_chi = [120000, 45000, 300000]
+tong = 0
+for so_tien in khoan_chi:
+    tong = tong + so_tien
+print(tong)</pre>
+<p><code>range(n)</code> sinh các số 0..n-1: <code>for i in range(5):</code>. Vòng lặp <code>while</code> chạy khi điều kiện còn đúng, dùng khi chưa biết trước số lần lặp.</p>
+<p><code>break</code> thoát vòng lặp ngay; <code>continue</code> bỏ qua phần còn lại của lượt hiện tại.</p>
+<p><b>Mẫu tích lũy:</b> khởi tạo biến kết quả trước vòng lặp, cập nhật trong vòng lặp, dùng sau vòng lặp. Đây là mẫu dùng để tính tổng, đếm, tìm lớn nhất. Lỗi hay gặp: khởi tạo <code>tong = 0</code> bên trong vòng lặp nên kết quả bị đặt lại mỗi lượt.</p>
+</div>
+
+<div class="page">
+<h2>Chương 6. Hàm</h2>
+<p>Hàm gom một đoạn xử lý thành khối có tên, nhận tham số và trả về kết quả bằng <code>return</code>:</p>
+<pre>def tinh_tong(khoan_chi):
+    tong = 0
+    for so_tien in khoan_chi:
+        tong += so_tien
+    return tong</pre>
+<p>Hàm tốt làm <b>một việc</b>, có tên động từ mô tả việc đó (<code>tinh_tong</code>, <code>loc_theo_danh_muc</code>), và không in ra màn hình khi nhiệm vụ của nó là tính toán — để phần gọi hàm quyết định in hay không.</p>
+<p>Phân biệt <code>print</code> và <code>return</code>: <code>print</code> chỉ hiển thị, <code>return</code> trao giá trị cho nơi gọi để dùng tiếp. Hàm không có <code>return</code> trả về <code>None</code>.</p>
+<p>Tham số mặc định: <code>def dinh_dang(so_tien, don_vi="đồng"):</code>.</p>
+</div>
+
+<div class="page">
+<h2>Chương 7. Danh sách (list)</h2>
+<p>List chứa nhiều giá trị theo thứ tự: <code>ds = [3, 1, 2]</code>. Truy cập theo chỉ số từ 0: <code>ds[0]</code>; chỉ số âm lấy từ cuối: <code>ds[-1]</code>.</p>
+<p>Thao tác thường dùng: <code>append</code> thêm cuối, <code>len</code> đếm phần tử, <code>sorted</code> trả về danh sách đã sắp xếp, <code>sum</code>, <code>max</code>, <code>min</code>.</p>
+<p><b>List comprehension</b> tạo danh sách mới từ danh sách cũ:</p>
+<pre>lon = [x for x in khoan_chi if x &gt; 100000]</pre>
+<p>Cắt lát: <code>ds[1:3]</code> lấy phần tử 1 và 2. Lỗi <code>IndexError</code> xảy ra khi truy cập chỉ số không tồn tại.</p>
+</div>
+
+<div class="page">
+<h2>Chương 8. Từ điển (dict)</h2>
+<p>Dict lưu cặp khóa–giá trị, tra cứu theo khóa:</p>
+<pre>khoan = {"so_tien": 120000, "danh_muc": "an uong", "ngay": "2026-03-02"}
+print(khoan["danh_muc"])</pre>
+<p>Dùng <code>get</code> khi khóa có thể không có: <code>khoan.get("ghi_chu", "")</code>. Duyệt dict bằng <code>for khoa, gia_tri in khoan.items():</code>.</p>
+<p><b>Gom nhóm</b> là mẫu quan trọng: cộng dồn số tiền theo danh mục.</p>
+<pre>theo_danh_muc = {}
+for k in cac_khoan:
+    dm = k["danh_muc"]
+    theo_danh_muc[dm] = theo_danh_muc.get(dm, 0) + k["so_tien"]</pre>
+</div>
+
+<div class="page">
+<h2>Chương 9. Làm việc với tệp</h2>
+<p>Đọc tệp văn bản với <code>with open(...)</code> để tệp được đóng tự động:</p>
+<pre>with open("chi_tieu.txt", encoding="utf-8") as f:
+    for dong in f:
+        print(dong.strip())</pre>
+<p>Luôn ghi rõ <code>encoding="utf-8"</code> khi làm việc với tiếng Việt. Chế độ <code>"w"</code> ghi đè, <code>"a"</code> ghi thêm vào cuối.</p>
+<p><b>JSON</b> là định dạng phổ biến để lưu list/dict:</p>
+<pre>import json
+with open("chi_tieu.json", encoding="utf-8") as f:
+    cac_khoan = json.load(f)</pre>
+<p><code>json.dump(du_lieu, f, ensure_ascii=False, indent=2)</code> ghi ra tệp, giữ nguyên dấu tiếng Việt.</p>
+</div>
+
+<div class="page">
+<h2>Chương 10. Tổ chức chương trình và kiểm thử đơn giản</h2>
+<p>Chương trình lớn hơn nên chia thành nhiều hàm nhỏ và một hàm <code>main()</code> gọi chúng theo thứ tự. Đặt lời gọi trong khối:</p>
+<pre>if __name__ == "__main__":
+    main()</pre>
+<p>để tệp có thể được import mà không tự chạy.</p>
+<p><b>Kiểm thử bằng assert:</b> viết vài dòng kiểm tra kết quả mong đợi của hàm, ví dụ <code>assert tinh_tong([1, 2]) == 3</code>. Với nhiều trường hợp, dùng thư viện <code>pytest</code>: đặt các hàm <code>test_...</code> trong tệp <code>test_*.py</code> và chạy lệnh <code>pytest</code>.</p>
+<p>Nên kiểm tra cả trường hợp biên: danh sách rỗng, một phần tử, số âm.</p>
+</div>
+
+<div class="page">
+<h2>Phụ lục A. Bảng lỗi thường gặp</h2>
+<ul>
+<li><b>IndentationError</b>: thụt lề không đều; dùng 4 dấu cách, không trộn Tab.</li>
+<li><b>NameError</b>: dùng biến chưa gán hoặc gõ sai tên.</li>
+<li><b>TypeError</b>: phép toán giữa hai kiểu không hợp (chuỗi + số).</li>
+<li><b>KeyError</b>: truy cập khóa không có trong dict; dùng <code>get</code>.</li>
+<li><b>FileNotFoundError</b>: sai đường dẫn tệp; kiểm tra thư mục đang chạy.</li>
+</ul>
+<p>Khi gặp lỗi, đọc dòng cuối của thông báo (loại lỗi) và số dòng được chỉ ra trước khi sửa.</p>
+</div>
+
+<div class="page">
+<h2>Phụ lục B. Lịch học 8 buổi</h2>
+<ol>
+<li>Chương 1–2: cài đặt, biến, kiểu dữ liệu.</li>
+<li>Chương 3–4: biểu thức, điều kiện.</li>
+<li>Chương 5: vòng lặp.</li>
+<li>Chương 6: hàm.</li>
+<li>Chương 7–8: list, dict.</li>
+<li>Chương 9: tệp và JSON.</li>
+<li>Chương 10: tổ chức chương trình, kiểm thử.</li>
+<li>Bảo vệ dự án cuối khóa.</li>
+</ol>
+</div>
+
+</body>
+</html>
