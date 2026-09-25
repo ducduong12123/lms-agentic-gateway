@@ -3,6 +3,7 @@
 import difflib
 import hashlib
 import json
+import math
 import re
 import unicodedata
 
@@ -154,3 +155,53 @@ def fold(text):
 
 def terms(text):
 	return [term for term in re.findall(r"[a-z0-9_]+", fold(text)) if len(term) > 1]
+
+
+# Common Vietnamese function words (accent-folded) that carry no topic. Learner questions are
+# full of them ("em", "thì", "ở đâu"), and without this list they outweigh words like "try".
+# Folding merges words such as dừng/dùng/đúng into "dung", so ambiguous content words stay in.
+STOPWORDS = frozenset(
+	"""
+	em anh chi ban minh toi thay co cac nhung mot nay kia do day the thi la ma va voi cua cho
+	de o dau khi nao gi sao tai vi vay nen lam duoc bi da dang se roi hay hoac hon nhu cung
+	con chua khong phai can muon hoi giup oi a ah nhe nha vao ra len xuong tu den trong ngoai
+	sau truoc ve theo boi rang neu thuc su bang nhieu it moi chi dat
+	""".split()
+)
+
+
+def search_terms(text):
+	"""Terms used for ranking: :func:`terms` without Vietnamese function words."""
+	return [term for term in terms(text) if term not in STOPWORDS]
+
+
+def rank_sections(query, sections):
+	"""Score sections against a query, weighting rare terms higher (IDF over these sections).
+
+	Returns ``(score, section)`` pairs, best first, for sections sharing at least one term.
+	The score is the share of the query's IDF weight the section covers, plus 1 when the
+	whole query appears verbatim, so 0.5 means "covers half of what the question is about".
+	"""
+	query_terms = set(search_terms(query))
+	if not query_terms or not sections:
+		return []
+	haystacks = [fold((section.get("heading") or "") + " " + (section.get("text") or "")) for section in sections]
+	section_terms = [set(terms(haystack)) for haystack in haystacks]
+	total = len(sections)
+	idf = {
+		term: math.log(1 + total / (1 + sum(1 for found in section_terms if term in found)))
+		for term in query_terms
+	}
+	weight = sum(idf.values())
+	folded_query = fold(query)
+	ranked = []
+	for section, haystack, found in zip(sections, haystacks, section_terms):
+		overlap = query_terms & found
+		if not overlap:
+			continue
+		score = sum(idf[term] for term in overlap) / weight
+		if folded_query in haystack:
+			score += 1
+		ranked.append((score, section))
+	ranked.sort(key=lambda item: item[0], reverse=True)
+	return ranked

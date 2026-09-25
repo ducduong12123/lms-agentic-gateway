@@ -5,7 +5,7 @@ from frappe import _
 from frappe.utils import cint, flt
 
 from lms_copilot.copilot import access
-from lms_copilot.copilot.content import content_hash, fold, lesson_sections, terms
+from lms_copilot.copilot.content import content_hash, lesson_sections, rank_sections
 from lms_copilot.copilot.validation import existing, integer, load_json, required_text
 
 MAX_SEARCH_RESULTS = 10
@@ -103,39 +103,27 @@ def search_course_content(course, query, limit=5):
 	access.assert_course_reader(course)
 	query = required_text(query, _("Query"), 500)
 	limit = integer(limit, _("Limit"), minimum=1, maximum=MAX_SEARCH_RESULTS)
-	query_terms = set(terms(query))
-	if not query_terms:
-		return {"query": query, "results": []}
-
-	scored = []
+	sections = []
 	for lesson_name in _course_lessons(course):
 		lesson = frappe.get_doc("Course Lesson", lesson_name)
 		for section in lesson_sections(lesson):
-			haystack = fold((section["heading"] or "") + " " + section["text"])
-			section_terms = set(terms(haystack))
-			overlap = query_terms & section_terms
-			if not overlap:
-				continue
-			score = len(overlap) / len(query_terms)
-			if fold(query) in haystack:
-				score += 1
-			scored.append(
-				(
-					score,
-					{
-						"lesson": lesson.name,
-						"lesson_title": lesson.title,
-						"block_id": section["block_id"],
-						"heading": section["heading"],
-						"snippet": section["text"][:SNIPPET_CHARS],
-						"citation": f"{lesson.title}"
-						+ (f" · {section['heading']}" if section["heading"] else ""),
-						"score": round(score, 3),
-					},
-				)
-			)
-	scored.sort(key=lambda item: item[0], reverse=True)
-	return {"query": query, "results": [item for _score, item in scored[:limit]]}
+			sections.append({**section, "lesson": lesson.name, "lesson_title": lesson.title})
+
+	results = []
+	for score, section in rank_sections(query, sections)[:limit]:
+		results.append(
+			{
+				"lesson": section["lesson"],
+				"lesson_title": section["lesson_title"],
+				"block_id": section["block_id"],
+				"heading": section["heading"],
+				"snippet": section["text"][:SNIPPET_CHARS],
+				"citation": f"{section['lesson_title']}"
+				+ (f" · {section['heading']}" if section["heading"] else ""),
+				"score": round(score, 3),
+			}
+		)
+	return {"query": query, "results": results}
 
 
 def rubric_for_assignment(assignment):
