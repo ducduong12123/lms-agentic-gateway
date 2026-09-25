@@ -6,6 +6,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from gateway.config import settings
+
 
 _CSRF_TOKEN_RE = re.compile(r'window\["csrf_token"\]\s*=\s*"([^"]+)"')
 
@@ -120,7 +122,7 @@ class FrappeClient:
     def get_copilot_tools(self) -> list[dict]:
         """Catalog tool lms_copilot cho user hiện tại; site chưa cài app thì trả []."""
         try:
-            message = self.get_method("lms_copilot.api.get_tools").get("message") or {}
+            message = self.get_method(f"{settings.copilot_api}.get_tools").get("message") or {}
         except RuntimeError:
             return []
         return list(message.get("tools") or [])
@@ -143,19 +145,19 @@ class FrappeClient:
         ):
             if value is not None:
                 body[key] = value
-        return self._call("POST", "/api/method/lms_copilot.api.call_tool", body=body).get("message")
+        return self._call("POST", f"/api/method/{settings.copilot_api}.call_tool", body=body).get("message")
 
     def get_copilot_weekly_insight(self, course: str, week_start: str | None = None) -> dict | None:
         """Báo cáo điểm vướng mới nhất (hoặc của tuần chứa week_start); chưa có thì None."""
         params = {"course": course}
         if week_start:
             params["week_start"] = week_start
-        message = self.get_method("lms_copilot.api.get_weekly_insight", **params).get("message")
+        message = self.get_method(f"{settings.copilot_api}.get_weekly_insight", **params).get("message")
         return message if isinstance(message, dict) else None
 
     def rate_copilot_answer(self, conversation: str, message_index: int, helpful: bool):
         return self.call_method(
-            "lms_copilot.api.rate_answer",
+            f"{settings.copilot_api}.rate_answer",
             conversation=conversation,
             message_index=int(message_index),
             helpful=1 if helpful else 0,

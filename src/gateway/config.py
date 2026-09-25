@@ -56,6 +56,9 @@ class Settings:
     transcript_retention_days: int = int(_get("TRANSCRIPT_RETENTION_DAYS", "90") or 90)
     # Job gọi từ lịch/cron ngoài dùng Bearer này và chạy bằng tài khoản AI Engine (FRAPPE_API_KEY).
     copilot_job_key: str = _get("COPILOT_JOB_KEY", "")
+    # Module chứa API Copilot trên Frappe: "lms.copilot.api" (Copilot tích hợp trong LMS) hoặc
+    # "lms_copilot.api" (app lms_copilot riêng, cho site chỉ dùng widget).
+    copilot_api: str = (_get("COPILOT_API", "lms.copilot.api") or "lms.copilot.api").strip().rstrip(".")
     weekly_report_hour: int = int(_get("WEEKLY_REPORT_HOUR", "7") or 7)
     # lms_copilot chưa có tool liệt kê khóa học, nên lịch báo cáo tuần đọc danh sách từ env.
     copilot_weekly_courses: tuple[str, ...] = tuple(
