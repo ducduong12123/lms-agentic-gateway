@@ -75,6 +75,8 @@ class Settings:
     review_max_files: int = int(_get("REVIEW_MAX_FILES", "200") or 200)
     review_prompt_chars: int = int(_get("REVIEW_PROMPT_CHARS", "60000") or 60000)
     review_llm_timeout: int = int(_get("REVIEW_LLM_TIMEOUT", "180") or 180)
+    course_import_prompt_chars: int = int(_get("COURSE_IMPORT_PROMPT_CHARS", "120000") or 120000)
+    course_import_llm_timeout: int = int(_get("COURSE_IMPORT_LLM_TIMEOUT", "300") or 300)
 
 
 settings = Settings()

@@ -33,6 +33,7 @@ from gateway.runtime.model_client import OpenAICompatClient
 from gateway.runtime.route_adapter import load_lesson_context, resolve_lms_context
 from gateway.runtime.scheduler import ProactiveWorker
 from gateway.runtime import review_jobs
+from gateway.runtime import course_import
 from gateway.runtime.review_worker import ReviewRunner, ReviewWorker
 from gateway.tools.catalog import build_registry
 from gateway.tools import plan_executors
@@ -835,6 +836,30 @@ def copilot_review_job(payload: ReviewJobPayload, authorization: str | None = He
     if queued:
         review_runner.submit(job["id"])
     return {"job": job["id"], "status": job["status"], "queued": queued}
+
+class CourseImportJobPayload(BaseModel):
+    course_import: str = Field(min_length=1, max_length=140)
+    site: str | None = Field(default="", max_length=500)
+    model: str | None = Field(default="", max_length=140)
+
+
+@app.post("/copilot/jobs/course-import", status_code=202)
+@app.post("/ai/copilot/jobs/course-import", status_code=202)
+def copilot_course_import_job(payload: CourseImportJobPayload,
+                              authorization: str | None = Header(default=None)) -> dict:
+    """lms_copilot gọi sau khi giáo viên tải tài liệu lên; soạn khóa học ở thread nền."""
+    _require_job_key(authorization)
+    frappe = _base_frappe()
+    if not frappe.is_configured:
+        raise HTTPException(status_code=503, detail="gateway has no Frappe service account")
+    model = payload.model or settings.llm_model
+    llm = OpenAICompatClient(settings.llm_base_url, settings.llm_api_key, model,
+                             timeout=settings.course_import_llm_timeout)
+    course_import.start_course_import(lambda: course_import.run_course_import(
+        frappe, llm, payload.course_import, model, settings.course_import_prompt_chars,
+    ))
+    return {"course_import": payload.course_import, "status": "queued"}
+
 
 # ==================================================================================
 # lms_copilot: F2 trợ giảng (đánh giá câu trả lời, hỏi giáo viên) + F4 báo cáo tuần.
