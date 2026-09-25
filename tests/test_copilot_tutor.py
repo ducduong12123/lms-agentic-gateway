@@ -343,3 +343,12 @@ def test_search_courses_is_hidden_when_course_is_known():
     llm = ScriptedLLM({"content": "Xem [[cite:LS-1#b1]]."})
     agent_loop.run_agent(llm, registry, "student", "vòng lặp for?", _context())
     assert "search_courses" not in llm.seen_tools[0]
+
+
+def test_related_lessons_keep_only_blocks_close_to_the_best():
+    calls = [{"tool": tutor.SEARCH_TOOL, "args": {"course": "PY-101"}, "result": {"results": [
+        {"lesson": "L3", "block_id": "try", "citation": "try/except", "score": 0.56},
+        {"lesson": "L2", "block_id": "loop", "citation": "Vòng lặp", "score": 0.44},
+        {"lesson": "L3", "block_id": "err", "citation": "Lỗi", "score": 0.5},
+    ]}}]
+    assert [item["block_id"] for item in tutor.related_citations(calls)] == ["try", "err"]

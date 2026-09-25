@@ -266,8 +266,10 @@ def extract_citations(answer: str, tool_calls: list[dict]) -> tuple[str, list[di
     return cleaned, citations, course
 
 
-# Điểm tối thiểu (tỉ lệ từ khóa trùng) để một khối tìm được coi là "bài học liên quan".
-RELATED_MIN_SCORE = 0.5
+# lms_copilot chấm điểm theo phần trọng số IDF của câu hỏi mà một khối bao phủ.
+# "Bài học liên quan" chỉ lấy khối đủ tốt và gần với khối tốt nhất, để không kèm link lạc đề.
+RELATED_MIN_SCORE = 0.3
+RELATED_OF_BEST = 0.8
 MAX_RELATED = 2
 _MODEL_SOURCE_LINE = re.compile(r"^[^\n]*(?:Nguồn|nguồn)[^\n]*(?:LMS Course|Course Lesson)[^\n]*$\n?", re.M)
 
@@ -280,6 +282,9 @@ def related_citations(tool_calls: list[dict]) -> list[dict]:
         key=lambda item: item[0],
         reverse=True,
     )
+    if ranked:
+        best = ranked[0][0]
+        ranked = [item for item in ranked if item[0] >= best * RELATED_OF_BEST]
     return [
         {"lesson": key[0], "block_id": key[1], "label": info["label"][:200], "related": True}
         for _score, key, info in ranked[:MAX_RELATED]
