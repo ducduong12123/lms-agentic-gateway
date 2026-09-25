@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 import hashlib
+import hmac
 import json
 import threading
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -24,7 +26,7 @@ from gateway.runtime import actions, course_projects, runs
 from gateway.runtime.approval import mark_executed, peek_approval, pending_for
 from gateway.runtime.approval import approve as claim_approval
 from gateway.runtime.events import EventProcessor
-from gateway.runtime import features, learner
+from gateway.runtime import features, learner, tutor, weekly_insight
 from gateway.runtime.identity import Identity, IdentityResolver
 from gateway.runtime.long_memory import search_memories
 from gateway.runtime.model_client import OpenAICompatClient
@@ -51,9 +53,18 @@ def _base_frappe() -> FrappeClient:
 
 identity_resolver = IdentityResolver(_base_frappe(), settings.identity_cache_ttl)
 event_processor = EventProcessor(_base_frappe(), settings.poll_interval_seconds)
+def _scheduled_weekly(now: datetime) -> list[dict]:
+    """Lịch thứ Hai: báo cáo tuần vừa kết thúc cho các khóa COPILOT_WEEKLY_COURSES."""
+    return run_weekly_for_courses(
+        settings.copilot_weekly_courses,
+        (now.date() - timedelta(days=7)).isoformat(),
+    )
+
+
 proactive_worker = ProactiveWorker(
     _base_frappe(), settings.scheduler_timezone, settings.daily_plan_hour,
     settings.transcript_retention_days,
+    weekly_job=_scheduled_weekly, weekly_hour=settings.weekly_report_hour,
 )
 _rate_lock = threading.Lock()
 _rate_events: dict[str, deque[float]] = defaultdict(deque)
@@ -171,9 +182,14 @@ def _memory_context(payload: ChatPayload, identity: Identity) -> dict[str, Any]:
     lesson_context = load_lesson_context(
         _base_frappe().with_session(identity.sid), route, identity.role
     )
-    tutor = learner_context_for_prompt(
+    tutor_context = learner_context_for_prompt(
         identity.user, str(route.get("course") or ""), str(route.get("lesson") or "")
     )
+    if identity.role == "student" and lesson_context:
+        # F2: bài có assignment chưa có kết quả -> agent chỉ gợi ý, không giải hộ.
+        tutor_context["pending_assignments"] = tutor.pending_assignments(
+            _base_frappe().with_session(identity.sid), identity.user, lesson_context,
+        )
     instructions = {
         "feynman": (
             "Chế độ Feynman: đóng vai người mới học. Yêu cầu học viên giảng lại concept, "
@@ -192,7 +208,7 @@ def _memory_context(payload: ChatPayload, identity: Identity) -> dict[str, Any]:
         "mode_instruction": instructions.get(payload.mode, ""),
         "approval_mode": payload.approval_mode,
         "long_term_memories": search_memories(identity.user, payload.message, top_k=4),
-        **tutor,
+        **tutor_context,
     }
     if identity.user and identity.user != "Guest" and conversation_id:
         detail = features.get_chat_session(identity.user, conversation_id, limit=100)
@@ -544,7 +560,9 @@ def recompute(request: Request, identity: Identity = Depends(trusted_identity)) 
 @app.delete("/me/data")
 def erase_my_data(request: Request, identity: Identity = Depends(trusted_identity)) -> dict:
     _require_same_origin(request)
-    return features.erase_member(identity.user)
+    erased = features.erase_member(identity.user)
+    tutor.forget_member(identity.user)
+    return erased
 
 
 @app.post("/ops/run-daily")
@@ -766,6 +784,133 @@ def _apply_write_plan(frappe, tool_name: str, plan: dict, payload_items, typed_c
         result["applied_items"] = [str(entry.get("id") or "") for entry in selected]
         result["rejected_items"] = [str(entry.get("id") or "") for entry in rejected]
     return result
+
+
+# ==================================================================================
+# lms_copilot: F2 trợ giảng (đánh giá câu trả lời, hỏi giáo viên) + F4 báo cáo tuần.
+# Khối riêng để dễ merge với các endpoint /copilot/* khác.
+# ==================================================================================
+
+
+class CopilotRatePayload(BaseModel):
+    conversation: str = Field(min_length=1, max_length=140)
+    message_index: int = Field(ge=1, le=400)
+    helpful: bool
+
+
+class CopilotEscalatePayload(BaseModel):
+    course: str = Field(min_length=1, max_length=140)
+    question: str = Field(min_length=1, max_length=4000)
+    lesson: str = Field(default="", max_length=140)
+    summary: str = Field(default="", max_length=2000)
+    session_id: str = Field(default="", max_length=128)
+
+
+class CopilotWeeklyJobPayload(BaseModel):
+    course: str = Field(min_length=1, max_length=140)
+    week_start: str = Field(default="", pattern=r"^(\d{4}-\d{2}-\d{2})?$")
+
+
+def _copilot_http_error(exc: Exception) -> HTTPException:
+    detail = str(exc)
+    if "HTTP 403" in detail:
+        status = 403
+    elif "HTTP 404" in detail:
+        status = 404
+    elif "HTTP 417" in detail:
+        status = 400
+    else:
+        status = 502
+    return HTTPException(status_code=status, detail=detail[:500])
+
+
+def _job_llm() -> OpenAICompatClient:
+    return OpenAICompatClient(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
+
+
+def run_weekly_for_courses(courses, week_start: str = "") -> list[dict]:
+    """Chạy job tuần bằng tài khoản AI Engine; lỗi của một khóa không chặn khóa khác."""
+    frappe = _base_frappe()
+    if not frappe.is_configured:
+        return [{"status": "skipped", "error": "FRAPPE_API_KEY chưa cấu hình"}]
+    llm = _job_llm()
+    results = []
+    for course in courses:
+        try:
+            results.append(
+                weekly_insight.run_weekly_job(frappe, llm, course, week_start or None, settings.llm_model)
+            )
+        except Exception as exc:  # noqa: BLE001 - báo lỗi theo từng khóa
+            results.append({"course": course, "status": "error", "error": str(exc)[:500]})
+    return results
+
+
+def _weekly_job_client(request: Request, sid: str | None):
+    """Bearer COPILOT_JOB_KEY -> tài khoản AI Engine; nếu không, session giáo viên/admin."""
+    header = str(request.headers.get("authorization") or "")
+    if header.lower().startswith("bearer "):
+        token = header[7:].strip()
+        key = settings.copilot_job_key
+        if not key or not hmac.compare_digest(token.encode(), key.encode()):
+            raise HTTPException(status_code=401, detail="invalid job key")
+        frappe = _base_frappe()
+        if not frappe.is_configured:
+            raise HTTPException(status_code=503, detail="AI Engine service account is not configured")
+        return frappe, "service"
+    identity = trusted_identity(sid)
+    _require_same_origin(request)
+    _require_roles(identity, "teacher", "admin")
+    return _base_frappe().with_session(identity.sid), identity.user
+
+
+@app.post("/copilot/answers/rate")
+def copilot_rate_answer(payload: CopilotRatePayload, request: Request,
+                        identity: Identity = Depends(trusted_identity)) -> dict:
+    _require_same_origin(request)
+    try:
+        result = _base_frappe().with_session(identity.sid).rate_copilot_answer(
+            payload.conversation, payload.message_index, payload.helpful,
+        )
+    except RuntimeError as exc:
+        raise _copilot_http_error(exc) from exc
+    return {"ok": True, "result": result}
+
+
+@app.post("/copilot/escalate")
+def copilot_escalate(payload: CopilotEscalatePayload, request: Request,
+                     identity: Identity = Depends(trusted_identity)) -> dict:
+    _require_same_origin(request)
+    _check_rate(identity, limit=10)
+    arguments = {"course": payload.course, "question": payload.question}
+    if payload.lesson:
+        arguments["lesson"] = payload.lesson
+    if payload.summary:
+        arguments["summary"] = payload.summary
+    conversation = tutor.get_conversation(identity.user, payload.session_id)
+    try:
+        result = _base_frappe().with_session(identity.sid).call_copilot_tool(
+            "escalate_to_teacher", arguments, conversation=conversation or None, model=settings.llm_model,
+        )
+    except RuntimeError as exc:
+        raise _copilot_http_error(exc) from exc
+    return {"ok": True, "conversation": conversation, "result": result}
+
+
+@app.post("/copilot/jobs/weekly")
+def copilot_weekly_job(payload: CopilotWeeklyJobPayload, request: Request,
+                       sid: str | None = Cookie(default=None)) -> dict:
+    frappe, actor = _weekly_job_client(request, sid)
+    try:
+        result = weekly_insight.run_weekly_job(
+            frappe, _job_llm(), payload.course, payload.week_start or None, settings.llm_model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _copilot_http_error(exc) from exc
+    return {"ok": result.get("status") == "saved", "actor": actor, **result}
+
+# ============================== hết khối lms_copilot ==============================
 
 
 @app.post("/webhook/frappe")
