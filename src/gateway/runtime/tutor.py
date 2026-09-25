@@ -226,6 +226,7 @@ def _retrieved_blocks(tool_calls: list[dict]) -> tuple[dict, str]:
                     key = (str(item["lesson"]), str(item["block_id"]))
                     blocks.setdefault(key, {
                         "label": str(item.get("citation") or item.get("lesson_title") or item["lesson"]),
+                        "score": float(item.get("score") or 0),
                     })
         elif call.get("tool") == LESSON_TOOL:
             course = course or str(result.get("course") or "")
@@ -263,6 +264,26 @@ def extract_citations(answer: str, tool_calls: list[dict]) -> tuple[str, list[di
     cleaned = CITE_RE.sub(replace, str(answer or ""))
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned).strip()
     return cleaned, citations, course
+
+
+# Điểm tối thiểu (tỉ lệ từ khóa trùng) để một khối tìm được coi là "bài học liên quan".
+RELATED_MIN_SCORE = 0.5
+MAX_RELATED = 2
+_MODEL_SOURCE_LINE = re.compile(r"^[^\n]*(?:Nguồn|nguồn)[^\n]*(?:LMS Course|Course Lesson)[^\n]*$\n?", re.M)
+
+
+def related_citations(tool_calls: list[dict]) -> list[dict]:
+    """Model không tự gắn [[cite:…]]: lấy các khối Gateway đã tìm có điểm đủ cao làm bài học liên quan."""
+    blocks, _course = _retrieved_blocks(tool_calls)
+    ranked = sorted(
+        ((info.get("score", 0), key, info) for key, info in blocks.items() if info.get("score", 0) >= RELATED_MIN_SCORE),
+        key=lambda item: item[0],
+        reverse=True,
+    )
+    return [
+        {"lesson": key[0], "block_id": key[1], "label": info["label"][:200], "related": True}
+        for _score, key, info in ranked[:MAX_RELATED]
+    ]
 
 
 def lesson_routes(registry, course: str) -> dict[str, str]:
@@ -310,12 +331,20 @@ def finish_turn(registry, role: str, user_msg: str, answer: str, tool_calls: lis
     if not is_active(role, registry):
         return answer, None
     cleaned, citations, tool_course = extract_citations(answer, tool_calls)
+    # Dòng "Nguồn: LMS Course …, Course Lesson …" model tự viết thay bằng trích dẫn thật của Gateway.
+    cleaned = _MODEL_SOURCE_LINE.sub("", cleaned).strip()
+    offscope = bool(context.get("_offscope"))
+    if not citations and not offscope:
+        citations = related_citations(tool_calls)
+        if citations:
+            cleaned += "\n\nBài học liên quan: " + "; ".join(
+                f"[{index}] {item['label']}" for index, item in enumerate(citations, 1)
+            )
     escalated = any(
         isinstance(call, dict) and call.get("tool") == ESCALATE_TOOL
         and isinstance(call.get("result"), dict) and not call["result"].get("error")
         for call in tool_calls or []
     )
-    offscope = bool(context.get("_offscope"))
     if not citations and not escalated:
         note = OFFSCOPE_NOTE if offscope else NO_GROUNDING_NOTE
         if note not in cleaned:

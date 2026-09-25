@@ -171,6 +171,11 @@ def _allowed(role: str, registry, context: dict) -> list[str]:
     if context.get("_tutor"):
         # Có lms_copilot: nội dung bài lấy từ khối trích dẫn được, không từ get_lesson_context.
         allowed = [name for name in allowed if name != "get_lesson_context"]
+        route = context.get("route") if isinstance(context.get("route"), dict) else {}
+        if route.get("course"):
+            # Đã biết khóa từ trang đang mở; search_courses đọc REST mà học viên không có quyền,
+            # lỗi đó khiến model tưởng "không truy cập được khóa học".
+            allowed = [name for name in allowed if name != "search_courses"]
     return allowed
 
 

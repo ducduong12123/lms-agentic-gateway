@@ -42,12 +42,15 @@ class FakeFrappe:
         self.catalog = LEARNER_CATALOG if catalog is None else catalog
         self.calls = []
         self.turns = 0
+        self.search_results = None
 
     def get_copilot_tools(self):
         return self.catalog
 
     def call_copilot_tool(self, tool, arguments=None, **kwargs):
         self.calls.append((tool, dict(arguments or {}), kwargs))
+        if tool == "search_course_content" and self.search_results is not None:
+            return {"query": arguments["query"], "results": self.search_results}
         if tool == "search_course_content":
             return {"query": arguments["query"], "results": [{
                 "lesson": "LS-1", "lesson_title": "Vòng lặp", "block_id": "b1", "heading": "For",
@@ -203,6 +206,7 @@ def test_escalation_by_the_agent_reuses_the_conversation():
 
 def test_answer_without_grounding_offers_the_teacher():
     frappe = FakeFrappe()
+    frappe.search_results = []
     registry = build_registry(frappe)
     result = agent_loop.run_agent(
         ScriptedLLM({"content": "Python ra đời năm 1991."}), registry, "student", "Python ra đời khi nào?", _context(),
@@ -311,3 +315,31 @@ def test_offscope_question_skips_retrieval():
     agent_loop.run_agent(ScriptedLLM({"content": "Hỏi giáo viên nhé."}), registry, "student",
                          "Học phí khóa này bao nhiêu?", _context())
     assert not [call for call in frappe.calls if call[0] == "search_course_content"]
+
+
+def test_related_lessons_are_attached_when_model_skips_cite_markers():
+    frappe = FakeFrappe()
+    registry = build_registry(frappe)
+    answer = "Dùng vòng for để lặp.\nNguồn: LMS Course: chưa xác định, Course Lesson: chưa xác định"
+    result = agent_loop.run_agent(ScriptedLLM({"content": answer}), registry, "student", "vòng lặp for?", _context())
+    assert "LMS Course" not in result["answer"]
+    assert "Bài học liên quan: [1] Vòng lặp · For" in result["answer"]
+    assert tutor.NO_GROUNDING_NOTE not in result["answer"]
+    assert result["tutor"]["citations"][0]["related"] is True
+    assert result["tutor"]["citations"][0]["route"] == "/lms/courses/PY-101/learn/1-2"
+
+
+def test_weak_matches_are_not_shown_as_related():
+    frappe = FakeFrappe()
+    frappe.search_results = [{"lesson": "LS-1", "block_id": "b1", "citation": "Vòng lặp", "score": 0.2}]
+    registry = build_registry(frappe)
+    result = agent_loop.run_agent(ScriptedLLM({"content": "Không rõ."}), registry, "student", "abc xyz?", _context())
+    assert result["tutor"]["citations"] == []
+    assert tutor.NO_GROUNDING_NOTE in result["answer"]
+
+
+def test_search_courses_is_hidden_when_course_is_known():
+    registry = build_registry(FakeFrappe())
+    llm = ScriptedLLM({"content": "Xem [[cite:LS-1#b1]]."})
+    agent_loop.run_agent(llm, registry, "student", "vòng lặp for?", _context())
+    assert "search_courses" not in llm.seen_tools[0]
