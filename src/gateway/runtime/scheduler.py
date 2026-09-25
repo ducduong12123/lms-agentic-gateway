@@ -12,7 +12,7 @@ from gateway.runtime import features, learner
 
 class ProactiveWorker:
     def __init__(self, frappe, timezone: str = "Asia/Ho_Chi_Minh", hour: int = 7,
-                 transcript_retention_days: int = 90):
+                 transcript_retention_days: int = 90, weekly_job=None, weekly_hour: int = 7):
         self.frappe = frappe
         self.timezone = ZoneInfo(timezone)
         self.hour = max(0, min(23, int(hour)))
@@ -20,6 +20,10 @@ class ProactiveWorker:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_date = ""
+        # F4: báo cáo điểm vướng tuần, chạy thứ Hai lúc weekly_hour. weekly_job(now) do server cấp.
+        self.weekly_job = weekly_job
+        self.weekly_hour = max(0, min(23, int(weekly_hour)))
+        self._last_week = ""
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -38,6 +42,26 @@ class ProactiveWorker:
             now = datetime.now(self.timezone)
             if now.hour == self.hour and self._last_date != now.date().isoformat():
                 self.run_daily(now)
+            if self.weekly_due(now):
+                self.run_weekly(now)
+
+    def weekly_due(self, now: datetime) -> bool:
+        return (
+            self.weekly_job is not None
+            and now.weekday() == 0
+            and now.hour == self.weekly_hour
+            and self._last_week != now.date().isoformat()
+        )
+
+    def run_weekly(self, now: datetime | None = None) -> dict:
+        now = now or datetime.now(self.timezone)
+        self._last_week = now.date().isoformat()
+        if self.weekly_job is None:
+            return {"date": self._last_week, "results": []}
+        try:
+            return {"date": self._last_week, "results": self.weekly_job(now)}
+        except Exception as exc:  # noqa: BLE001 - lịch nền không được chết vì một lần lỗi
+            return {"date": self._last_week, "error": str(exc)}
 
     def run_daily(self, now: datetime | None = None) -> dict:
         now = now or datetime.now(self.timezone)
