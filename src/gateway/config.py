@@ -55,5 +55,20 @@ class Settings:
     daily_plan_hour: int = int(_get("DAILY_PLAN_HOUR", "7") or 7)
     transcript_retention_days: int = int(_get("TRANSCRIPT_RETENTION_DAYS", "90") or 90)
 
+    # Job nhận xét bài dự án do lms_copilot gọi tới (F1).
+    # COPILOT_JOB_KEY phải trùng Copilot Settings.gateway_api_key; để trống thì từ chối mọi job.
+    copilot_job_key: str = _get("COPILOT_JOB_KEY", "")
+    review_sandbox: str = (_get("REVIEW_SANDBOX", "off") or "off").strip().lower()
+    review_sandbox_image: str = _get("REVIEW_SANDBOX_IMAGE", "python:3.12-slim")
+    review_test_command: str = _get(
+        "REVIEW_TEST_COMMAND", "python -m pytest -q -rA -p no:cacheprovider"
+    )
+    review_test_timeout: int = int(_get("REVIEW_TEST_TIMEOUT", "60") or 60)
+    review_work_dir: str = _get("REVIEW_WORK_DIR", "")
+    review_max_repo_mb: int = int(_get("REVIEW_MAX_REPO_MB", "20") or 20)
+    review_max_files: int = int(_get("REVIEW_MAX_FILES", "200") or 200)
+    review_prompt_chars: int = int(_get("REVIEW_PROMPT_CHARS", "60000") or 60000)
+    review_llm_timeout: int = int(_get("REVIEW_LLM_TIMEOUT", "180") or 180)
+
 
 settings = Settings()
