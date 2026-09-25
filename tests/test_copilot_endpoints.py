@@ -182,5 +182,5 @@ def test_teacher_weekly_question_reads_insight_through_gateway_tool(tmp_path, mo
     )
     assert result["tool_calls"][0]["tool"] == "copilot_get_weekly_insight"
     assert frappe.insight_reads == [("PY-101", None)]
-    assert "/copilot/insight/PY-101" in result["answer"]
+    assert "/lms/copilot/insight/PY-101" in result["answer"]
     assert "Nhầm range (2 học viên)" in result["answer"]

@@ -92,7 +92,7 @@ def test_job_saves_groups_with_counts_taken_from_signals_and_caps_proposals():
     result = weekly_insight.run_weekly_job(frappe, llm, "PY-101", "2026-09-23", model="fake-model")
 
     assert result["status"] == "saved"
-    assert result["link"] == "/copilot/insight/PY-101"
+    assert result["link"] == "/lms/copilot/insight/PY-101"
     assert frappe.called("gather_weekly_signals")[0][1] == {"course": "PY-101", "week_start": "2026-09-23"}
     saves = frappe.called("save_weekly_insight")
     assert len(saves) == 2
@@ -169,7 +169,7 @@ def test_latest_or_run_reads_existing_insight_and_runs_job_when_missing():
     out = weekly_insight.latest_or_run(existing, FakeLLM({"groups": []}), "PY-101")
     assert out["generated"] is False
     assert out["insight"]["groups"][0]["title"] == "Có sẵn"
-    assert out["link"] == "/copilot/insight/PY-101"
+    assert out["link"] == "/lms/copilot/insight/PY-101"
     assert existing.called("gather_weekly_signals") == []
 
     last_week = (weekly_insight.week_monday() - timedelta(days=7)).isoformat()

@@ -9,6 +9,8 @@ chứng mà nhóm tham chiếu. Nhóm có con số hoặc bằng chứng không 
 """
 from __future__ import annotations
 
+from ..config import settings
+
 import json
 import re
 from datetime import date, datetime, timedelta
@@ -28,7 +30,7 @@ INACTIVE_REASON = "Không có hoạt động trong 9 ngày gần nhất"
 
 
 def insight_link(course: str) -> str:
-    return f"/copilot/insight/{course}"
+    return f"{settings.copilot_pages}/insight/{course}"
 
 
 def week_monday(value: str | date | None = None, timezone: str = "Asia/Ho_Chi_Minh") -> date:

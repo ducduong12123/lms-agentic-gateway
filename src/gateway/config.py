@@ -59,6 +59,8 @@ class Settings:
     # Module chứa API Copilot trên Frappe: "lms.copilot.api" (Copilot tích hợp trong LMS) hoặc
     # "lms_copilot.api" (app lms_copilot riêng, cho site chỉ dùng widget).
     copilot_api: str = (_get("COPILOT_API", "lms.copilot.api") or "lms.copilot.api").strip().rstrip(".")
+    # Nơi đặt các màn hình Copilot cho giáo viên: /lms/copilot (trong LMS) hoặc /copilot (app riêng).
+    copilot_pages: str = (_get("COPILOT_PAGES", "/lms/copilot") or "/lms/copilot").rstrip("/")
     weekly_report_hour: int = int(_get("WEEKLY_REPORT_HOUR", "7") or 7)
     # lms_copilot chưa có tool liệt kê khóa học, nên lịch báo cáo tuần đọc danh sách từ env.
     copilot_weekly_courses: tuple[str, ...] = tuple(
