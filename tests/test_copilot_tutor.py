@@ -285,3 +285,29 @@ def test_pending_assignment_switches_to_hints_only():
     block = tutor.prompt_block({**_context(), "pending_assignments": pending})
     assert "CHỈ gợi ý" in block and "ASG-1" in block
     assert "CHỈ gợi ý" not in tutor.prompt_block(_context())
+
+
+def test_gateway_retrieves_course_content_even_if_llm_skips_the_tool():
+    frappe = FakeFrappe()
+    registry = build_registry(frappe)
+    # Model trả lời ngay, không gọi tool nào: Gateway vẫn phải tìm trước và cho phép trích dẫn.
+    llm = ScriptedLLM({"content": "Dùng vòng for [[cite:LS-1#b1]]."})
+    result = agent_loop.run_agent(llm, registry, "student", "vòng lặp for?", _context())
+
+    searches = [call for call in frappe.calls if call[0] == "search_course_content"]
+    assert searches and searches[0][1] == {"course": "PY-101", "query": "vòng lặp for?"}
+    prompt = " ".join(str(m.get("content")) for m in llm.seen_messages[0] if m["role"] == "system")
+    assert "Gateway đã gọi copilot_search_course_content" in prompt and '"b1"' in prompt
+    roles = [(m["role"], str(m.get("content"))) for m in llm.seen_messages[0]]
+    prefetch_at = next(i for i, (_, text) in enumerate(roles) if text.startswith("Gateway đã gọi"))
+    assert roles[prefetch_at + 1] == ("user", "vòng lặp for?")
+    assert result["tutor"]["grounded"] is True
+    assert result["tutor"]["citations"][0]["block_id"] == "b1"
+
+
+def test_offscope_question_skips_retrieval():
+    frappe = FakeFrappe()
+    registry = build_registry(frappe)
+    agent_loop.run_agent(ScriptedLLM({"content": "Hỏi giáo viên nhé."}), registry, "student",
+                         "Học phí khóa này bao nhiêu?", _context())
+    assert not [call for call in frappe.calls if call[0] == "search_course_content"]
