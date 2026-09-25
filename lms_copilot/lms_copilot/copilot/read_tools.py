@@ -2,7 +2,7 @@
 
 import frappe
 from frappe import _
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 from lms_copilot.copilot import access
 from lms_copilot.copilot.content import content_hash, fold, lesson_sections, terms
@@ -152,6 +152,9 @@ def serialise_rubric(rubric, for_learner=False):
 			"criterion": row.criterion,
 			"description": row.description,
 			"max_level": cint(row.max_level) or 3,
+			"points": flt(row.get("points")) or None,
+			"levels": row.get("levels"),
+			"taught_in_lesson": row.get("taught_in_lesson"),
 		}
 		if not for_learner:
 			item["pass_example"] = row.pass_example
