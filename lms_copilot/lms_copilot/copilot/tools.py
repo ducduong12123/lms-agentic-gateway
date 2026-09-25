@@ -248,6 +248,41 @@ TOOLS = [
 		_proposal("propose_learner_reminder"),
 	),
 	Tool(
+		"propose_rubric",
+		PROPOSE,
+		frozenset({TEACHER, ENGINE}),
+		"Propose the grading rubric of an assignment. Replaces the current rubric once a teacher approves; "
+		"nothing is created or changed before that.",
+		_schema(
+			["assignment", "criteria"],
+			assignment=_string("LMS Assignment name."),
+			criteria={
+				"type": "array",
+				"minItems": 1,
+				"items": {
+					"type": "object",
+					"properties": {
+						"criterion": _string("Short criterion name, unique in the rubric."),
+						"description": _string("What the criterion checks."),
+						"max_level": {"type": "integer", "minimum": 1, "maximum": 10},
+						"points": {"type": "number", "minimum": 0},
+						"levels": _string("What each level means, one line per level: '1: …'."),
+						"taught_in_lesson": _string("Course Lesson where the skill is taught."),
+						"pass_example": _string("Example that meets the criterion. Hidden from learners."),
+						"fail_example": _string("Example that misses it. Hidden from learners."),
+					},
+					"required": ["criterion"],
+				},
+			},
+			title=_string("Rubric title. Defaults to the assignment title."),
+			visible_to_learner={"type": "boolean"},
+			notes=_string("Notes for the review agent."),
+			reason=_string("Why this rubric, for the teacher."),
+			confidence=CONFIDENCE,
+		),
+		_proposal("propose_rubric"),
+	),
+	Tool(
 		"save_weekly_insight",
 		RECORD,
 		frozenset({TEACHER, REVIEWER, ENGINE}),
@@ -303,6 +338,7 @@ CONVERSATION_TOOLS = {
 	"propose_lesson_change",
 	"propose_lesson_quiz",
 	"propose_learner_reminder",
+	"propose_rubric",
 }
 
 

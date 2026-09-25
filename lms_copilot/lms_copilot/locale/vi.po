@@ -139,6 +139,15 @@ msgstr "Sửa bài giảng"
 msgid "Lesson quiz"
 msgstr "Quiz bài học"
 
+msgid "Rubric"
+msgstr "Rubric chấm điểm"
+
+msgid "Add rubric to {0}"
+msgstr "Thêm rubric cho {0}"
+
+msgid "Replace rubric of {0}"
+msgstr "Thay rubric của {0}"
+
 msgid "Lesson text"
 msgstr "Nội dung bài học"
 

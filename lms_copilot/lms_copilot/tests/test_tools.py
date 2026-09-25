@@ -4,7 +4,13 @@ from lms_copilot.copilot import conversations, insights, tools
 from lms_copilot.install import AI_ENGINE_ROLE, after_install
 from lms_copilot.tests.utils import CopilotTestCase
 
-TEACHER_ONLY = {"get_learner_progress", "propose_lesson_quiz", "propose_lesson_change", "propose_feedback"}
+TEACHER_ONLY = {
+	"get_learner_progress",
+	"propose_lesson_quiz",
+	"propose_lesson_change",
+	"propose_feedback",
+	"propose_rubric",
+}
 
 
 class TestToolAccess(CopilotTestCase):
